@@ -1,12 +1,5 @@
 {
-  "framework": null,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist/client",
-  "installCommand": "npm install",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "https://hearth-personal-chat.a4jin69.chatgpt.site/$1"
-    }
-  ]
+  "framework": "nextjs",
+  "buildCommand": "npx next build",
+  "installCommand": "npm install"
 }
