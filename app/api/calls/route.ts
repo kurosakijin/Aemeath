@@ -132,16 +132,6 @@ export async function POST(r: Request) {
         await db.batch([
           db
             .prepare(
-              'INSERT INTO call_locks (user,"call",expires) VALUES (?,?,?)',
-            )
-            .bind(u.id, id, now + 90000),
-          db
-            .prepare(
-              'INSERT INTO call_locks (user,"call",expires) VALUES (?,?,?)',
-            )
-            .bind(peer, id, now + 90000),
-          db
-            .prepare(
               "INSERT INTO calls (id,conversation,caller,callee,kind,status,offer,created,updated,caller_seen,callee_seen) VALUES (?,?,?,?,?,'ringing',?,?,?,?,?)",
             )
             .bind(
