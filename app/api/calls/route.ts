@@ -79,7 +79,6 @@ export async function GET(r: Request) {
       }
       return json({ iceServers, relay });
     }
-    await expire();
     const id = p.get("id");
     const db = database();
     if (id) {
@@ -105,7 +104,6 @@ export async function POST(r: Request) {
     const now = Date.now();
     if (d.action === "start") {
       await throttle("call-start:" + u.id, 8, 60000);
-      await expire();
       const conversation = str(d.conversation);
       const conv = await participant(conversation, u.id);
       const peer = conv.first === u.id ? conv.second : conv.first;
