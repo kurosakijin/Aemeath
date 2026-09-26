@@ -42,7 +42,7 @@ type Server = { id: string; name: string; owner: string };
 type Channel = {
   id: string;
   name: string;
-  kind: "text" | "voice" | "forum";
+  kind?: "text" | "voice" | "forum";
   topic?: string;
 };
 type Member = { id: string; name: string };
