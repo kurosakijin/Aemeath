@@ -1,4 +1,3 @@
-
 import {Pool} from '@neondatabase/serverless';
 const connectionString=process.env.DATABASE_URL;
 const pool=connectionString?new Pool({connectionString}):null;
@@ -16,6 +15,8 @@ async function ensureSchema(){
     CREATE TABLE IF NOT EXISTS direct_messages(id TEXT PRIMARY KEY,conversation TEXT NOT NULL REFERENCES conversations(id),sender TEXT NOT NULL REFERENCES accounts(id),body TEXT NOT NULL,created BIGINT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_dm_conversation_created ON direct_messages(conversation,created);
     CREATE TABLE IF NOT EXISTS calls(id TEXT PRIMARY KEY,conversation TEXT NOT NULL REFERENCES conversations(id),caller TEXT NOT NULL,callee TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL,offer TEXT,answer TEXT,created BIGINT NOT NULL,updated BIGINT NOT NULL,caller_seen INTEGER NOT NULL,callee_seen INTEGER NOT NULL,reason TEXT);
+    ALTER TABLE calls ALTER COLUMN caller_seen TYPE BIGINT;
+    ALTER TABLE calls ALTER COLUMN callee_seen TYPE BIGINT;
     CREATE INDEX IF NOT EXISTS idx_calls_callee_status ON calls(callee,status);
     CREATE TABLE IF NOT EXISTS call_locks("user" TEXT PRIMARY KEY,"call" TEXT NOT NULL,expires BIGINT NOT NULL);
     CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY,name TEXT NOT NULL);
