@@ -1,3 +1,4 @@
+
 import {Pool} from '@neondatabase/serverless';
 const connectionString=process.env.DATABASE_URL;
 const pool=connectionString?new Pool({connectionString}):null;
