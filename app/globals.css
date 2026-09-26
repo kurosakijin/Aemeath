@@ -252,6 +252,54 @@ svg {
 .channel:hover {
   background: #313237;
 }
+.channel-edit {
+  margin-left: auto;
+  opacity: 0.55;
+}
+.channel:hover .channel-edit {
+  opacity: 1;
+}
+.channel-type-picker {
+  display: grid;
+  gap: 8px;
+}
+.channel-type-picker button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #41434a;
+  border-radius: 8px;
+  background: #292b30;
+  color: #eee;
+  text-align: left;
+}
+.channel-type-picker button.selected {
+  border-color: #e8ad7d;
+  background: #39322e;
+}
+.channel-type-picker small {
+  display: block;
+  color: #a9abb2;
+  margin-top: 3px;
+}
+.channel-topic-input {
+  min-height: 90px;
+  resize: vertical;
+}
+.danger-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 1px solid #7c343b;
+  color: #ff7b83;
+  border-radius: 7px;
+  padding: 10px 12px;
+}
+.danger-button:hover {
+  background: #44262a;
+}
 .sidebar-bottom {
   margin-top: auto;
   padding: 25px 22px;
