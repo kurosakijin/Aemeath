@@ -16,6 +16,7 @@ import {
   MicOff,
   X,
   Volume2,
+  RefreshCw,
 } from "lucide-react";
 import { request, type LocalUser } from "@/lib/online";
 type Call = {
@@ -50,7 +51,7 @@ async function gathered(pc: RTCPeerConnection) {
       pc.removeEventListener("icegatheringstatechange", change);
       resolve();
     };
-    const timeout = setTimeout(finish, 8000);
+    const timeout = setTimeout(finish, 500);
     const change = () => {
       if (pc.iceGatheringState === "complete") finish();
     };
@@ -83,7 +84,8 @@ export function CallProvider({
     disconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     pollBusy = useRef(false),
     heartbeatAt = useRef(0),
-    alive = useRef(true);
+    alive = useRef(true),
+    facing = useRef<"user" | "environment">("user");
   const show = (v: View | null) => {
     active.current = v;
     setView(v);
@@ -145,6 +147,53 @@ export function CallProvider({
     if (remoteVideo.current) remoteVideo.current.srcObject = remoteStream;
     if (localVideo.current) localVideo.current.srcObject = localStream;
   }, [remoteStream, localStream, view?.kind]);
+  useEffect(() => {
+    if (!view || (!view.incoming && view.status !== "Ringing…")) return;
+    let stopped = false,
+      context: AudioContext | null = null,
+      timer: ReturnType<typeof setInterval> | null = null;
+    const ring = () => {
+      if (stopped) return;
+      context ??= new AudioContext();
+      const oscillator = context.createOscillator(),
+        gain = context.createGain();
+      oscillator.frequency.value = view.incoming ? 880 : 440;
+      gain.gain.setValueAtTime(0.08, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.32);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.34);
+    };
+    ring();
+    timer = setInterval(ring, 1400);
+    return () => {
+      stopped = true;
+      if (timer) clearInterval(timer);
+      void context?.close();
+    };
+  }, [view?.id, view?.incoming, view?.status]);
+  async function switchCamera() {
+    const pc = peer.current,
+      current = stream.current;
+    if (!pc || !current) return;
+    const nextFacing = facing.current === "user" ? "environment" : "user";
+    const media = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { exact: nextFacing } },
+      audio: false,
+    });
+    const next = media.getVideoTracks()[0],
+      previous = current.getVideoTracks()[0];
+    const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+    if (sender) await sender.replaceTrack(next);
+    else pc.addTrack(next, current);
+    if (previous) {
+      current.removeTrack(previous);
+      previous.stop();
+    }
+    current.addTrack(next);
+    facing.current = nextFacing;
+    setLocalStream(new MediaStream(current.getTracks()));
+  }
   useEffect(() => {
     const t = setInterval(() => {
       if (started.current)
@@ -239,7 +288,6 @@ export function CallProvider({
     try {
       const pc = await setup(kind, version);
       await pc.setLocalDescription(await pc.createOffer());
-      await gathered(pc);
       if (version !== generation.current) return;
       await request("/api/calls", {
         action: "start",
@@ -273,7 +321,6 @@ export function CallProvider({
       const pc = await setup(v.kind, version);
       await pc.setRemoteDescription(JSON.parse(v.incoming.offer));
       await pc.setLocalDescription(await pc.createAnswer());
-      await gathered(pc);
       if (version !== generation.current) return;
       await request("/api/calls", {
         action: "answer",
@@ -504,6 +551,15 @@ export function CallProvider({
                     }}
                   >
                     {cameraOff ? <VideoOff /> : <Video />}
+                  </button>
+                )}
+                {view.kind === "video" && (
+                  <button
+                    aria-label="Switch camera"
+                    title="Switch front or rear camera"
+                    onClick={() => void switchCamera()}
+                  >
+                    <RefreshCw />
                   </button>
                 )}
                 <button
