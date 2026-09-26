@@ -38,7 +38,7 @@ async function expire() {
       .bind(now - 90000, now - 90000),
     db
       .prepare(
-        "DELETE FROM call_locks WHERE expires<? OR call IN (SELECT id FROM calls WHERE status='ended')",
+        `DELETE FROM call_locks WHERE expires<? OR "call" IN (SELECT id FROM calls WHERE status='ended')`,
       )
       .bind(now),
   ]);
@@ -134,12 +134,12 @@ export async function POST(r: Request) {
         await db.batch([
           db
             .prepare(
-              "INSERT INTO call_locks (user,call,expires) VALUES (?,?,?)",
+              'INSERT INTO call_locks (user,"call",expires) VALUES (?,?,?)',
             )
             .bind(u.id, id, now + 90000),
           db
             .prepare(
-              "INSERT INTO call_locks (user,call,expires) VALUES (?,?,?)",
+              'INSERT INTO call_locks (user,"call",expires) VALUES (?,?,?)',
             )
             .bind(peer, id, now + 90000),
           db
@@ -175,7 +175,7 @@ export async function POST(r: Request) {
             "UPDATE calls SET status='ended',reason=?,offer=NULL,answer=NULL,updated=? WHERE id=?",
           )
           .bind(d.reason === "declined" ? "declined" : "ended", now, id),
-        db.prepare("DELETE FROM call_locks WHERE call=?").bind(id),
+        db.prepare('DELETE FROM call_locks WHERE "call"=?').bind(id),
       ]);
       return json({ ok: true });
     }
@@ -190,7 +190,7 @@ export async function POST(r: Request) {
           )
           .bind(now, id),
         db
-          .prepare("UPDATE call_locks SET expires=? WHERE user=? AND call=?")
+          .prepare('UPDATE call_locks SET expires=? WHERE user=? AND "call"=?')
           .bind(now + 90000, u.id, id),
       ]);
       return json({ ok: true });
