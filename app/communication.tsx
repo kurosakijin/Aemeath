@@ -35,6 +35,11 @@ type Conversation = {
   name: string;
   preview: string | null;
   updated: number;
+  call_status?: string | null;
+  call_reason?: string | null;
+  call_kind?: "voice" | "video" | null;
+  call_caller?: string | null;
+  call_created?: number | string | null;
 };
 type Message = {
   id: string;
@@ -46,6 +51,16 @@ type Message = {
 const timestamp = (value: number | string) =>
   typeof value === "number" ? value : Number(value);
 const messageDate = (value: number | string) => new Date(timestamp(value));
+const callLabel = (call: Conversation, userId: string) => {
+  if (!call.call_status) return null;
+  if (call.call_status === "ringing")
+    return call.call_caller === userId ? "Calling…" : "Incoming call";
+  if (call.call_reason === "missed")
+    return "Missed " + (call.call_kind || "voice") + " call";
+  if (call.call_reason === "declined")
+    return "Declined " + (call.call_kind || "voice") + " call";
+  return "Last " + (call.call_kind || "voice") + " call ended";
+};
 function Initial({ name }: { name: string }) {
   return <div className="avatar">{name.slice(0, 2).toUpperCase()}</div>;
 }
@@ -348,7 +363,9 @@ function Inbox({
                 <Initial name={c.name} />
                 <span>
                   <strong>{c.name}</strong>
-                  <small>{c.preview || "Say hello"}</small>
+                  <small>
+                    {callLabel(c, user.id) || c.preview || "Say hello"}
+                  </small>
                 </span>
               </button>
             ))}
@@ -447,6 +464,17 @@ function Inbox({
                     This is the beginning of your conversation with{" "}
                     <strong>{conversation.name}</strong>.
                   </p>
+                  {callLabel(conversation, user.id) && (
+                    <p className="call-history">
+                      {callLabel(conversation, user.id)}
+                      {conversation.call_created
+                        ? " · " +
+                          messageDate(
+                            conversation.call_created,
+                          ).toLocaleString()
+                        : ""}
+                    </p>
+                  )}
                 </div>
                 {more && (
                   <button
