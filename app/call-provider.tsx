@@ -85,7 +85,8 @@ export function CallProvider({
     pollBusy = useRef(false),
     heartbeatAt = useRef(0),
     alive = useRef(true),
-    facing = useRef<"user" | "environment">("user");
+    facing = useRef<"user" | "environment">("user"),
+    lastAnswer = useRef("");
   const show = (v: View | null) => {
     active.current = v;
     setView(v);
@@ -193,6 +194,28 @@ export function CallProvider({
     current.addTrack(next);
     facing.current = nextFacing;
     setLocalStream(new MediaStream(current.getTracks()));
+  }
+  async function upgradeToVideo() {
+    const v = active.current,
+      pc = peer.current,
+      current = stream.current;
+    if (!v || !pc || !current || v.kind !== "voice") return;
+    const media = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" },
+      audio: false,
+    });
+    const track = media.getVideoTracks()[0];
+    current.addTrack(track);
+    pc.addTrack(track, current);
+    setLocalStream(new MediaStream(current.getTracks()));
+    show({ ...v, kind: "video", status: "Adding video…" });
+    await pc.setLocalDescription(await pc.createOffer());
+    lastAnswer.current = "";
+    await request("/api/calls", {
+      action: "upgrade",
+      id: v.id,
+      offer: JSON.stringify(pc.localDescription),
+    });
   }
   useEffect(() => {
     const t = setInterval(() => {
@@ -373,8 +396,32 @@ export function CallProvider({
             await request("/api/calls", { action: "heartbeat", id: v.id });
           }
           const pc = peer.current;
-          if (c.answer && c.caller === user.id && pc && !pc.remoteDescription) {
+          if (c.status === "upgrading" && c.callee === user.id && pc) {
+            await pc.setRemoteDescription(JSON.parse(c.offer));
+            const camera = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: "user" },
+              audio: false,
+            });
+            const track = camera.getVideoTracks()[0];
+            stream.current?.addTrack(track);
+            pc.addTrack(track, stream.current!);
+            setLocalStream(new MediaStream(stream.current!.getTracks()));
+            await pc.setLocalDescription(await pc.createAnswer());
+            await request("/api/calls", {
+              action: "answer",
+              id: c.id,
+              answer: JSON.stringify(pc.localDescription),
+            });
+            show({ ...active.current!, kind: "video", status: "Connecting…" });
+          }
+          if (
+            c.answer &&
+            c.caller === user.id &&
+            pc &&
+            c.answer !== lastAnswer.current
+          ) {
             await pc.setRemoteDescription(JSON.parse(c.answer));
+            lastAnswer.current = c.answer;
             if (active.current?.id === v.id) {
               show({ ...active.current, status: "Connecting…" });
               if (ringTimer.current) clearTimeout(ringTimer.current);
@@ -551,6 +598,15 @@ export function CallProvider({
                     }}
                   >
                     {cameraOff ? <VideoOff /> : <Video />}
+                  </button>
+                )}
+                {view.kind === "voice" && !view.incoming && (
+                  <button
+                    aria-label="Turn on video"
+                    title="Turn on video"
+                    onClick={() => void upgradeToVideo()}
+                  >
+                    <Video />
                   </button>
                 )}
                 {view.kind === "video" && (
