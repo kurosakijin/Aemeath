@@ -26,7 +26,7 @@ async function ensureSchema(){
   `).then(()=>undefined);
   return schemaPromise;
 }
-function numbered(sql:string){let i=0;return sql.replace(/\?/g,()=>`$${++i}`)}
+function numbered(sql:string){let i=0;return sql.replace(/(?<!["'])\buser\b(?!["'])/gi,'"user"').replace(/\?/g,()=>`$${++i}`)}
 class Statement{constructor(private sql:string,private args:unknown[]){ } async first<T=any>():Promise<T|null>{await ensureSchema();const r=await pool!.query(numbered(this.sql),this.args);return (r.rows[0] as T)||null} async all<T=any>():Promise<{results:T[]}>{await ensureSchema();const r=await pool!.query(numbered(this.sql),this.args);return {results:r.rows as T[]}} async run(){await ensureSchema();const r=await pool!.query(numbered(this.sql),this.args);return {success:true,meta:{changes:r.rowCount??0}}}}
 class Database{prepare(sql:string){return {bind:(...args:unknown[])=>new Statement(sql,args)}} async batch(statements:Statement[]){return Promise.all(statements.map(s=>s.run()))}}
 export function database(){return new Database()}
