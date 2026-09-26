@@ -183,10 +183,31 @@ export async function POST(r: Request) {
       ]);
       return json({ ok: true });
     }
+    if (d.action === "upgrade") {
+      if (u.id !== c.caller || c.status !== "active")
+        throw new AppError("This call cannot be upgraded.", 409);
+      const offer = str(d.offer);
+      try {
+        const value = JSON.parse(offer);
+        if (value.type !== "offer" || typeof value.sdp !== "string") throw 0;
+      } catch {
+        throw new AppError("Invalid video offer.");
+      }
+      await db
+        .prepare(
+          "UPDATE calls SET kind='video',status='upgrading',offer=?,answer=NULL,updated=? WHERE id=?",
+        )
+        .bind(offer, now, id)
+        .run();
+      return json({ ok: true });
+    }
     if (d.action === "answer") {
       if (u.id !== c.callee)
         throw new AppError("Only the recipient can answer.", 403);
-      if (c.status !== "ringing" || c.created < now - 60000)
+      if (
+        !["ringing", "upgrading"].includes(c.status) ||
+        (c.status === "ringing" && c.created < now - 60000)
+      )
         throw new AppError("This call is no longer ringing.", 409);
       const answer = str(d.answer);
       try {
@@ -202,7 +223,7 @@ export async function POST(r: Request) {
       }
       const result = await db
         .prepare(
-          "UPDATE calls SET answer=?,status='active',updated=?,callee_seen=? WHERE id=? AND status='ringing'",
+          "UPDATE calls SET answer=?,status='active',updated=?,callee_seen=? WHERE id=? AND status IN ('ringing','upgrading')",
         )
         .bind(answer, now, now, id)
         .run();
