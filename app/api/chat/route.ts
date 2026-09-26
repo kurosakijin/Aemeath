@@ -1,3 +1,4 @@
+
 import {chatUser as getChatGPTUser} from '@/lib/server/auth';
 import {database} from '@/db/raw';
 export const dynamic='force-dynamic';
