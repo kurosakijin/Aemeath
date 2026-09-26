@@ -1,4 +1,3 @@
-
 "use client";
 import { onlineChat as api, type LocalUser } from "@/lib/online";
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -23,6 +22,10 @@ import {
   GraduationCap,
   BookOpen,
   ChevronRight,
+  Volume2,
+  MessageSquare,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -36,7 +39,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 type Server = { id: string; name: string; owner: string };
-type Channel = { id: string; name: string };
+type Channel = {
+  id: string;
+  name: string;
+  kind: "text" | "voice" | "forum";
+  topic?: string;
+};
 type Member = { id: string; name: string };
 type Message = {
   id: string;
@@ -87,6 +95,11 @@ export default function Hearth({
     [mobile, setMobile] = useState(false),
     [showMembers, setShowMembers] = useState(true),
     [mobileMembers, setMobileMembers] = useState(false);
+  const [channelType, setChannelType] = useState<"text" | "voice" | "forum">(
+      "text",
+    ),
+    [channelTopic, setChannelTopic] = useState(""),
+    [editingChannel, setEditingChannel] = useState("");
   const end = useRef<HTMLDivElement>(null),
     room = useRef(""),
     serverRef = useRef(""),
@@ -103,6 +116,14 @@ export default function Hearth({
     setCode("");
     setCopied(false);
     setModal(type);
+  };
+  const openChannel = (item?: Channel) => {
+    setFormError("");
+    setEditingChannel(item?.id || "");
+    setField(item?.name || "");
+    setChannelType(item?.kind || "text");
+    setChannelTopic(item?.topic || "");
+    setModal(item ? "edit-channel" : "channel");
   };
   const refreshServers = useCallback(async (preferred?: string) => {
     const data = await api();
@@ -215,10 +236,24 @@ export default function Hearth({
           action: "channel",
           server: selected,
           name: field,
+          kind: channelType,
+          topic: channelTopic,
         });
         const data = await api("?server=" + encodeURIComponent(selected));
         setChannels(data.channels);
         setCurrent(d.id);
+      }
+      if (modal === "edit-channel") {
+        await api("", {
+          action: "edit-channel",
+          server: selected,
+          channel: editingChannel,
+          name: field,
+          kind: channelType,
+          topic: channelTopic,
+        });
+        const data = await api("?server=" + encodeURIComponent(selected));
+        setChannels(data.channels);
       }
       if (modal === "profile") {
         await api("", { action: "profile", name: field });
@@ -228,6 +263,26 @@ export default function Hearth({
           setMembers(d.members);
         }
       }
+      setModal("");
+    } catch (e) {
+      setFormError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function deleteChannel() {
+    if (!editingChannel || busy) return;
+    setBusy(true);
+    setFormError("");
+    try {
+      await api("", {
+        action: "delete-channel",
+        server: selected,
+        channel: editingChannel,
+      });
+      const data = await api("?server=" + encodeURIComponent(selected));
+      setChannels(data.channels);
+      setCurrent(data.channels[0]?.id || "");
       setModal("");
     } catch (e) {
       setFormError((e as Error).message);
@@ -363,14 +418,65 @@ export default function Hearth({
                 <button
                   title="Create channel"
                   aria-label="Create channel"
-                  onClick={() => open("channel")}
+                  onClick={() => openChannel()}
                 >
                   <Plus size={16} />
                 </button>
               )}
             </div>
-            {channels.length ? (
-              channels.map((c) => (
+            {channels.filter((c) => c.kind !== "voice").length ? (
+              channels
+                .filter((c) => c.kind !== "voice")
+                .map((c) => (
+                  <button
+                    className={"channel " + (c.id === current ? "active" : "")}
+                    key={c.id}
+                    onClick={() => {
+                      setCurrent(c.id);
+                      setMobile(false);
+                    }}
+                    aria-pressed={c.id === current}
+                  >
+                    {c.kind === "forum" ? (
+                      <MessageSquare size={19} />
+                    ) : (
+                      <Hash size={19} />
+                    )}
+                    {c.name}
+                    {owner && (
+                      <Pencil
+                        className="channel-edit"
+                        size={14}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openChannel(c);
+                        }}
+                      />
+                    )}
+                  </button>
+                ))
+            ) : (
+              <div className="channel active">
+                <Hash size={19} /> general
+              </div>
+            )}
+            <div className="channel-group">
+              <span>VOICE CHANNELS</span>
+              {owner && (
+                <button
+                  title="Create voice channel"
+                  onClick={() => {
+                    openChannel();
+                    setChannelType("voice");
+                  }}
+                >
+                  <Plus size={16} />
+                </button>
+              )}
+            </div>
+            {channels
+              .filter((c) => c.kind === "voice")
+              .map((c) => (
                 <button
                   className={"channel " + (c.id === current ? "active" : "")}
                   key={c.id}
@@ -378,17 +484,21 @@ export default function Hearth({
                     setCurrent(c.id);
                     setMobile(false);
                   }}
-                  aria-pressed={c.id === current}
                 >
-                  <Hash size={19} />
+                  <Volume2 size={19} />
                   {c.name}
+                  {owner && (
+                    <Pencil
+                      className="channel-edit"
+                      size={14}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openChannel(c);
+                      }}
+                    />
+                  )}
                 </button>
-              ))
-            ) : (
-              <div className="channel active">
-                <Hash size={19} /> general
-              </div>
-            )}
+              ))}
             <div className="sidebar-bottom">
               <Lock size={14} /> Private by invitation
             </div>
@@ -689,29 +799,33 @@ export default function Hearth({
             {modal === "picker"
               ? "Create Your Server"
               : modal === "create"
-              ? "A place for your people"
-              : modal === "join"
-                ? "Join your people"
-                : modal === "channel"
-                  ? "Create a channel"
-                  : modal === "profile"
-                    ? "Make yourself at home"
-                    : "Invite your people"}
+                ? "A place for your people"
+                : modal === "join"
+                  ? "Join your people"
+                  : modal === "channel"
+                    ? "Create a channel"
+                    : modal === "edit-channel"
+                      ? "Edit channel"
+                      : modal === "profile"
+                        ? "Make yourself at home"
+                        : "Invite your people"}
           </DialogTitle>
           <DialogDescription>
             {modal === "picker"
               ? "Your server is where you and your friends hang out. Make yours and start talking."
               : modal === "create"
-              ? "A small hangout, a group project, or your favorite corner of the internet."
-              : modal === "join"
-                ? "Paste an invitation link or code from a server owner."
-                : modal === "channel"
-                  ? "Give your next conversation a home."
-                  : modal === "profile"
-                    ? "Choose the name your friends will see in chat."
-                    : "Share this invitation with the people you want in " +
-                      (server?.name || "your server") +
-                      "."}
+                ? "A small hangout, a group project, or your favorite corner of the internet."
+                : modal === "join"
+                  ? "Paste an invitation link or code from a server owner."
+                  : modal === "channel"
+                    ? "Give your next conversation a home."
+                    : modal === "edit-channel"
+                      ? "Change this channel's name, type, or topic."
+                      : modal === "profile"
+                        ? "Choose the name your friends will see in chat."
+                        : "Share this invitation with the people you want in " +
+                          (server?.name || "your server") +
+                          "."}
           </DialogDescription>
           {!user ? (
             <>
@@ -725,15 +839,40 @@ export default function Hearth({
           ) : modal === "picker" ? (
             <div className="server-picker">
               <button className="server-choice" onClick={() => open("create")}>
-                <span>🏞️</span><strong>Create My Own</strong><ChevronRight />
+                <span>🏞️</span>
+                <strong>Create My Own</strong>
+                <ChevronRight />
               </button>
               <p className="picker-label">Start from a template</p>
-              {[[Gamepad2,"Gaming","Gaming hangout"],[Heart,"Friends","Friends group"],[GraduationCap,"Study Group","Study group"],[BookOpen,"School Club","School club"]].map(([Icon,label,template]) => {
+              {[
+                [Gamepad2, "Gaming", "Gaming hangout"],
+                [Heart, "Friends", "Friends group"],
+                [GraduationCap, "Study Group", "Study group"],
+                [BookOpen, "School Club", "School club"],
+              ].map(([Icon, label, template]) => {
                 const TemplateIcon = Icon as typeof Gamepad2;
-                return <button key={label as string} className="server-choice" onClick={() => { setField(template as string); setModal("create"); }}><TemplateIcon /><strong>{label as string}</strong><ChevronRight /></button>;
+                return (
+                  <button
+                    key={label as string}
+                    className="server-choice"
+                    onClick={() => {
+                      setField(template as string);
+                      setModal("create");
+                    }}
+                  >
+                    <TemplateIcon />
+                    <strong>{label as string}</strong>
+                    <ChevronRight />
+                  </button>
+                );
               })}
               <h3>Have an invite already?</h3>
-              <button className="secondary picker-join" onClick={() => open("join")}>Join a Server</button>
+              <button
+                className="secondary picker-join"
+                onClick={() => open("join")}
+              >
+                Join a Server
+              </button>
             </div>
           ) : modal === "invite" ? (
             <>
@@ -790,7 +929,7 @@ export default function Hearth({
                   ? "Server name"
                   : modal === "join"
                     ? "Invitation link or code"
-                    : modal === "channel"
+                    : modal === "channel" || modal === "edit-channel"
                       ? "Channel name"
                       : "Display name"}
               </label>
@@ -801,7 +940,7 @@ export default function Hearth({
                 placeholder={
                   modal === "create"
                     ? "e.g. The living room"
-                    : modal === "channel"
+                    : modal === "channel" || modal === "edit-channel"
                       ? "e.g. weekend-plans"
                       : modal === "join"
                         ? "Paste your invitation"
@@ -812,7 +951,7 @@ export default function Hearth({
                 maxLength={
                   modal === "join"
                     ? 500
-                    : modal === "channel"
+                    : modal === "channel" || modal === "edit-channel"
                       ? 32
                       : modal === "profile"
                         ? 40
@@ -821,6 +960,55 @@ export default function Hearth({
                 required
                 disabled={busy}
               />
+              {(modal === "channel" || modal === "edit-channel") && (
+                <>
+                  <span className="form-label">Channel type</span>
+                  <div className="channel-type-picker">
+                    {(
+                      [
+                        ["text", Hash, "Text", "Messages and everyday chat"],
+                        [
+                          "voice",
+                          Volume2,
+                          "Voice",
+                          "Voice, video, and screen sharing",
+                        ],
+                        [
+                          "forum",
+                          MessageSquare,
+                          "Forum",
+                          "Organized discussions",
+                        ],
+                      ] as const
+                    ).map(([value, Icon, label, help]) => (
+                      <button
+                        type="button"
+                        className={channelType === value ? "selected" : ""}
+                        key={value}
+                        onClick={() => setChannelType(value)}
+                      >
+                        <Icon size={20} />
+                        <span>
+                          <strong>{label}</strong>
+                          <small>{help}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <label className="form-label" htmlFor="channel-topic">
+                    Channel topic
+                  </label>
+                  <textarea
+                    id="channel-topic"
+                    className="form-input channel-topic-input"
+                    value={channelTopic}
+                    onChange={(e) => setChannelTopic(e.target.value)}
+                    maxLength={1000}
+                    placeholder="What is this channel about?"
+                    disabled={busy}
+                  />
+                </>
+              )}
               {formError && (
                 <p className="form-error" role="alert">
                   {formError}
@@ -840,9 +1028,21 @@ export default function Hearth({
                         ? "Join server"
                         : modal === "channel"
                           ? "Create channel"
-                          : "Save profile"}
+                          : modal === "edit-channel"
+                            ? "Save changes"
+                            : "Save profile"}
                   <ArrowRight size={16} />
                 </button>
+                {modal === "edit-channel" && (
+                  <button
+                    className="danger-button"
+                    type="button"
+                    disabled={busy}
+                    onClick={deleteChannel}
+                  >
+                    <Trash2 size={16} /> Delete channel
+                  </button>
+                )}
                 {modal === "create" && (
                   <button
                     className="secondary"
