@@ -1,4 +1,4 @@
-import {getChatGPTUser} from '@/app/chatgpt-auth';
+import {chatUser as getChatGPTUser} from '@/lib/server/auth';
 import {database} from '@/db/raw';
 export const dynamic='force-dynamic';
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
@@ -33,3 +33,4 @@ export async function POST(request:Request){
  return bad('Unknown action.');
  }catch(error){console.error('Chat write failed',error);return bad('Could not save your changes. Your input is still here; please try again.',503);}
 }
+
