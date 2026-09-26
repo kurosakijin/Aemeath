@@ -18,7 +18,7 @@ export async function GET(request:Request){
 export async function POST(request:Request){
  try{
  const user=await getChatGPTUser();if(!user)return bad('Please sign in to continue.',401);
- const origin=request.headers.get('origin');if(origin&&origin!==new URL(request.url).origin)return bad('Request not allowed.',403);
+ const origin=request.headers.get('origin');const trusted=['https://hearth-personal-chat.a4jin69.chatgpt.site','https://aemeath.vercel.app','https://aemeath-ltfah621q-kurosakijins-projects.vercel.app'];if(origin&&origin!==new URL(request.url).origin&&!trusted.includes(origin))return bad('Request not allowed.',403);
  if(Number(request.headers.get('content-length')||0)>12000)return bad('That request is too large.');
  let data;try{const raw=await request.text();if(raw.length>12000)return bad('That request is too large.');data=JSON.parse(raw);}catch{return bad('Invalid request.');}
  const db=database();const now=Date.now();const uid=user.userId;const action=data.action;
