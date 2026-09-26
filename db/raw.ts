@@ -19,10 +19,14 @@ async function ensureSchema(){
     CREATE TABLE IF NOT EXISTS call_locks("user" TEXT PRIMARY KEY,"call" TEXT NOT NULL,expires BIGINT NOT NULL);
     CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY,name TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS servers(id TEXT PRIMARY KEY,name TEXT NOT NULL,owner TEXT NOT NULL,created BIGINT NOT NULL);
-    CREATE TABLE IF NOT EXISTS members(server TEXT NOT NULL,user_id TEXT NOT NULL,joined BIGINT NOT NULL,PRIMARY KEY(server,user_id));
+    CREATE TABLE IF NOT EXISTS members(server TEXT NOT NULL,"user" TEXT NOT NULL,joined BIGINT NOT NULL,PRIMARY KEY(server,"user"));
     CREATE TABLE IF NOT EXISTS channels(id TEXT PRIMARY KEY,server TEXT NOT NULL,name TEXT NOT NULL,created BIGINT NOT NULL);
-    CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,channel TEXT NOT NULL,user_id TEXT NOT NULL,body TEXT NOT NULL,created BIGINT NOT NULL);
+    CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,channel TEXT NOT NULL,"user" TEXT NOT NULL,body TEXT NOT NULL,created BIGINT NOT NULL);
     CREATE TABLE IF NOT EXISTS invites(code TEXT PRIMARY KEY,server TEXT NOT NULL,expires BIGINT NOT NULL);
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='members' AND column_name='user_id') THEN ALTER TABLE members RENAME COLUMN user_id TO "user"; END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='user_id') THEN ALTER TABLE messages RENAME COLUMN user_id TO "user"; END IF;
+    END $$;
   `).then(()=>undefined);
   return schemaPromise;
 }
