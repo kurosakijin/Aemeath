@@ -1212,6 +1212,58 @@ svg {
   border-top: 1px solid #35363b;
   color: #7d808b;
 }
+.app-downloads {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin: 0 0 19px;
+}
+.app-download-title {
+  grid-column: 1 / -1;
+  color: #8f919b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.app-downloads a {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #414148;
+  border-radius: 9px;
+  background: #292a30;
+  color: #dedee4;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 650;
+  transition: border-color .15s, background .15s, transform .15s;
+}
+.app-downloads a:hover {
+  background: #353039;
+  border-color: #ba5b8a;
+  transform: translateY(-1px);
+}
+.signed-in-downloads {
+  position: fixed;
+  right: 74px;
+  top: 15px;
+  z-index: 31;
+}
+.app-downloads.compact {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+}
+.app-downloads.compact .app-download-title { display: none; }
+.app-downloads.compact a {
+  min-height: 36px;
+  padding: 0 11px;
+  background: #25262b;
+  box-shadow: 0 5px 18px #0004;
+}
 .auth-storage svg {
   margin-top: 3px;
 }
@@ -1351,6 +1403,15 @@ svg {
   .account-settings {
     padding: 24px !important;
   }
+  .signed-in-downloads {
+    right: 54px;
+    top: 10px;
+  }
+  .app-downloads.compact a {
+    width: 38px;
+    padding: 0;
+  }
+  .app-downloads.compact a span { display: none; }
 }
 .dm-sidebar .server-title {
   font-size: 19px;
