@@ -54,7 +54,7 @@ async function gathered(pc: RTCPeerConnection) {
       pc.removeEventListener("icegatheringstatechange", change);
       resolve();
     };
-    const timeout = setTimeout(finish, 500);
+    const timeout = setTimeout(finish, 2000);
     const change = () => {
       if (pc.iceGatheringState === "complete") finish();
     };
@@ -214,6 +214,7 @@ export function CallProvider({
     setLocalStream(new MediaStream(current.getTracks()));
     show({ ...v, kind: "video", status: "Adding video…" });
     await pc.setLocalDescription(await pc.createOffer());
+    await gathered(pc);
     lastAnswer.current = "";
     await request("/api/calls", {
       action: "upgrade",
@@ -313,6 +314,7 @@ export function CallProvider({
     try {
       const pc = await setup(kind, version);
       await pc.setLocalDescription(await pc.createOffer());
+      await gathered(pc);
       if (version !== generation.current) return;
       await request("/api/calls", {
         action: "start",
@@ -346,6 +348,7 @@ export function CallProvider({
       const pc = await setup(v.kind, version);
       await pc.setRemoteDescription(JSON.parse(v.incoming.offer));
       await pc.setLocalDescription(await pc.createAnswer());
+      await gathered(pc);
       if (version !== generation.current) return;
       await request("/api/calls", {
         action: "answer",
@@ -409,6 +412,7 @@ export function CallProvider({
             track.contentHint="motion";const sender=pc.addTrack(track, stream.current!);await tuneCallCamera(sender);
             setLocalStream(new MediaStream(stream.current!.getTracks()));
             await pc.setLocalDescription(await pc.createAnswer());
+            await gathered(pc);
             await request("/api/calls", {
               action: "answer",
               id: c.id,

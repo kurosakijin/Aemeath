@@ -10,6 +10,7 @@ type DeviceOption = { deviceId: string; label: string };
 type StreamQuality = "1080" | "1440";
 type PeerSlots = { audio:RTCRtpSender; camera:RTCRtpSender; screen:RTCRtpSender };
 function mediaPermissionDenied(error:unknown){const value=error as {name?:string;message?:string};return ["NotAllowedError","PermissionDeniedError","SecurityError"].includes(value?.name||"")||/permission|denied|not allowed|blocked/i.test(value?.message||String(error))}
+async function finishIce(pc:RTCPeerConnection,timeoutMs=1800){if(pc.iceGatheringState==="complete")return;await new Promise<void>(resolve=>{const done=()=>{clearTimeout(timer);pc.removeEventListener("icegatheringstatechange",change);resolve()},change=()=>{if(pc.iceGatheringState==="complete")done()},timer=setTimeout(done,timeoutMs);pc.addEventListener("icegatheringstatechange",change)})}
 
 const cameraConstraints=(deviceId:string):MediaTrackConstraints=>({
   deviceId:deviceId==="default"?undefined:{exact:deviceId},
@@ -103,6 +104,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const [streamMenu,setStreamMenu]=useState(false);
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), peerSlots=useRef(new Map<string,PeerSlots>()), names = useRef(new Map<string, string>()),
+    pendingIce=useRef(new Map<string,RTCIceCandidateInit[]>()),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
     microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null);
 
@@ -114,7 +116,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     setMicrophones(options("audioinput")); setSpeakers(options("audiooutput")); setCameras(options("videoinput"));
   }, []);
   const closePeer = useCallback((id: string) => {
-    peers.current.get(id)?.close(); peers.current.delete(id);peerSlots.current.delete(id);
+    peers.current.get(id)?.close(); peers.current.delete(id);peerSlots.current.delete(id);pendingIce.current.delete(id);
     setRemotes((old) => old.filter((r) => r.id !== id));
   }, []);
   const makePeer = useCallback((person: Person) => {
@@ -130,12 +132,12 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     pc.ontrack = (event) => {
       setRemotes((old) => {const existing=old.find(r=>r.id===person.id),stream=existing?.stream||new MediaStream(),incoming=event.streams[0]?.getTracks()||[event.track];incoming.forEach(track=>{if(!stream.getTracks().some(current=>current.id===track.id))stream.addTrack(track)});if(!stream.getTracks().some(current=>current.id===event.track.id))stream.addTrack(event.track);event.track.addEventListener("ended",()=>{try{stream.removeTrack(event.track)}catch{}},{once:true});return [...old.filter((r) => r.id !== person.id), { ...person, stream }];});
     };
-    pc.onconnectionstatechange = () => { if (["failed", "closed"].includes(pc.connectionState)) closePeer(person.id); };
+    pc.onconnectionstatechange = () => { if(pc.connectionState==="failed")setError("Voice media could not connect. A TURN relay is required on some mobile networks and restrictive Wi-Fi.");if (["failed", "closed"].includes(pc.connectionState)) closePeer(person.id); };
     return pc;
   }, [closePeer, signal, streamFps, streamQuality]);
   const offer = useCallback(async (person: Person) => {
     const pc = makePeer(person); if (pc.signalingState !== "stable") return;
-    await pc.setLocalDescription(await pc.createOffer());
+    await pc.setLocalDescription(await pc.createOffer());await finishIce(pc);
     await signal(person.id, { type: "description", description: pc.localDescription });
     if(screenTrack.current||cameraTrack.current)await signal(person.id,{type:"stream-state",active:true});
   }, [makePeer, signal]);
@@ -144,21 +146,21 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     if(message.type==="stream-state"){setRemoteSharing((old)=>{const next=new Set(old);if(message.active)next.add(item.from);else next.delete(item.from);return next});if(!message.active)setTheaterStream((old)=>old===item.from?"":old);return;}
     if(message.type==="stream-watch"){roomTone(message.active?"watch-start":"watch-stop");return;}
     const pc = makePeer(person);
-    if (message.type === "candidate") { try { await pc.addIceCandidate(message.candidate); } catch {} return; }
+    if (message.type === "candidate") { if(pc.remoteDescription)try{await pc.addIceCandidate(message.candidate)}catch{}else pendingIce.current.set(item.from,[...(pendingIce.current.get(item.from)||[]),message.candidate]);return; }
     if (message.type !== "description") return;
     const description = message.description as RTCSessionDescriptionInit;
     if (description.type === "offer") {
       if (pc.signalingState !== "stable") { await pc.setLocalDescription({ type: "rollback" }); }
-      await pc.setRemoteDescription(description); await pc.setLocalDescription(await pc.createAnswer());
+      await pc.setRemoteDescription(description);for(const candidate of pendingIce.current.get(item.from)||[])try{await pc.addIceCandidate(candidate)}catch{}pendingIce.current.delete(item.from);await pc.setLocalDescription(await pc.createAnswer());await finishIce(pc);
       await signal(item.from, { type: "description", description: pc.localDescription });
-    } else if (description.type === "answer" && pc.signalingState === "have-local-offer") await pc.setRemoteDescription(description);
+    } else if (description.type === "answer" && pc.signalingState === "have-local-offer"){await pc.setRemoteDescription(description);for(const candidate of pendingIce.current.get(item.from)||[])try{await pc.addIceCandidate(candidate)}catch{}pendingIce.current.delete(item.from)}
   }, [makePeer, signal]);
 
   const leave = useCallback(async () => {
     if (!joined && !local.current) return;
     roomTone("leave");
     setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
-    peers.current.forEach((pc) => pc.close()); peers.current.clear();peerSlots.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
+    peers.current.forEach((pc) => pc.close()); peers.current.clear();peerSlots.current.clear();pendingIce.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
     try { await post(channel, { action: "leave" }); } catch {}
   }, [channel, joined]);
   useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); if(joinedRef.current)void post(channel, { action: "leave" }); }, [channel]);
@@ -268,7 +270,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     </>}    {error && <div className="voice-error" role="alert">{error}</div>}
   </section>;
 }
-function RemoteAudio({ stream, speakerId }: { stream: MediaStream; speakerId: string }) { const ref=useRef<HTMLAudioElement>(null);useEffect(()=>{const audio=ref.current as (HTMLAudioElement&{setSinkId?:(id:string)=>Promise<void>})|null;if(!audio)return;const sync=()=>{audio.srcObject=new MediaStream(stream.getAudioTracks());if(stream.getAudioTracks().length)void audio.play().catch(()=>{})};sync();stream.addEventListener("addtrack",sync);stream.addEventListener("removetrack",sync);if(audio.setSinkId)void audio.setSinkId(speakerId).catch(()=>{});return()=>{stream.removeEventListener("addtrack",sync);stream.removeEventListener("removetrack",sync);audio.srcObject=null}},[stream,speakerId]);return <audio ref={ref} autoPlay/>}
+function RemoteAudio({ stream, speakerId }: { stream: MediaStream; speakerId: string }) { const ref=useRef<HTMLAudioElement>(null);useEffect(()=>{const audio=ref.current as (HTMLAudioElement&{setSinkId?:(id:string)=>Promise<void>})|null;if(!audio)return;audio.muted=false;audio.volume=1;const play=()=>{if(stream.getAudioTracks().length)void audio.play().catch(()=>{})},sync=()=>{audio.srcObject=new MediaStream(stream.getAudioTracks());play()};sync();stream.addEventListener("addtrack",sync);stream.addEventListener("removetrack",sync);document.addEventListener("pointerdown",play,{passive:true});document.addEventListener("touchend",play,{passive:true});if(audio.setSinkId)void audio.setSinkId(speakerId).catch(()=>{});return()=>{stream.removeEventListener("addtrack",sync);stream.removeEventListener("removetrack",sync);document.removeEventListener("pointerdown",play);document.removeEventListener("touchend",play);audio.srcObject=null}},[stream,speakerId]);return <audio ref={ref} autoPlay playsInline/>}
 function TrackVideo({track,muted=false}:{track:MediaStreamTrack|null;muted?:boolean}){const ref=useRef<HTMLVideoElement>(null);useEffect(()=>{const video=ref.current;if(!video)return;video.srcObject=track?new MediaStream([track]):null;if(track)void video.play().catch(()=>{});return()=>{video.srcObject=null}},[track]);return <video ref={ref} autoPlay playsInline muted={muted}/>}
 function StreamCard({name,theater,onTheater,onStop,onChange,onWatch,children}:{id:string;name:string;theater:boolean;onTheater:()=>void;onStop?:()=>void;onChange?:()=>void;onWatch?:(active:boolean)=>void;children:React.ReactNode}){const [menu,setMenu]=useState(false),card=useRef<HTMLElement>(null),fullscreenWatching=useRef(false);useEffect(()=>{const change=()=>{const active=document.fullscreenElement===card.current;if(active!==fullscreenWatching.current){fullscreenWatching.current=active;onWatch?.(active)}};document.addEventListener("fullscreenchange",change);return()=>document.removeEventListener("fullscreenchange",change)},[onWatch]);const pip=async(element:HTMLElement)=>{const video=element.querySelector("video");if(video&&document.pictureInPictureEnabled){video.addEventListener("enterpictureinpicture",()=>onWatch?.(true),{once:true});video.addEventListener("leavepictureinpicture",()=>onWatch?.(false),{once:true});await video.requestPictureInPicture().catch(()=>{})}};return <article ref={card} className={"stream-card "+(theater?"expanded":"")}><header><span><MonitorUp size={15}/><strong>{name}</strong><b>LIVE</b></span><div><button aria-label="Pop out stream" onClick={(e)=>void pip(e.currentTarget.closest(".stream-card") as HTMLElement)}><PictureInPicture2 size={17}/></button><button aria-label={theater?"Exit theater view":"Open theater view"} onClick={onTheater}>{theater?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</button><button aria-label="View fullscreen" onClick={(e)=>void(e.currentTarget.closest(".stream-card") as HTMLElement)?.requestFullscreen()}><Maximize2 size={17}/></button><button aria-label="Stream options" onClick={()=>setMenu(!menu)}><MoreHorizontal size={17}/></button></div>{menu&&<div className="stream-card-menu">{onStop&&<button onClick={onStop}>Stop streaming</button>}{onChange&&<button onClick={onChange}>Change stream</button>}<button onClick={(e)=>void pip(e.currentTarget.closest(".stream-card") as HTMLElement)}>Pop out</button><button onClick={onTheater}>{theater?"Exit theater":"Theater view"}</button><button onClick={(e)=>void(e.currentTarget.closest(".stream-card") as HTMLElement)?.requestFullscreen()}>Fullscreen</button></div>}</header><div className="stream-video" onClick={onTheater} title={theater?"Exit theater view":"Open theater view"}>{children}</div></article>}
 function VolumeIcon(){ return <span aria-hidden>◖))</span>; }
