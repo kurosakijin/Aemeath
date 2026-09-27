@@ -130,9 +130,17 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     peers = useRef(new Map<string, RTCPeerConnection>()), peerSlots=useRef(new Map<string,PeerSlots>()), names = useRef(new Map<string, string>()),
     pendingIce=useRef(new Map<string,RTCIceCandidateInit[]>()),seenSignals=useRef(new Set<string>()),polling=useRef(false),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
-    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null);
+    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>());
 
   const signal = useCallback((to: string, body: unknown) => post(channel, { action: "signal", to, body: JSON.stringify(body) }), [channel]);
+  const syncPeerTracks=useCallback(async()=>{
+    const audio=screenAudioTrack.current||microphoneTrack.current,camera=cameraTrack.current,screen=screenTrack.current;
+    await Promise.allSettled([...peerSlots.current.values()].map(async slots=>{
+      if(slots.audio.track!==audio){await slots.audio.replaceTrack(audio);await tuneAudioSender(slots.audio)}
+      if(slots.camera.track!==camera){await slots.camera.replaceTrack(camera);if(camera)await tuneCameraSender(slots.camera)}
+      if(slots.screen.track!==screen){await slots.screen.replaceTrack(screen);if(screen)await tuneVideoSender(slots.screen,streamFps,streamQuality)}
+    }));
+  },[streamFps,streamQuality]);
   const refreshDevices = useCallback(async () => {
     if (!navigator.mediaDevices?.enumerateDevices) return;
     const all = await navigator.mediaDevices.enumerateDevices();
@@ -140,6 +148,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     setMicrophones(options("audioinput")); setSpeakers(options("audiooutput")); setCameras(options("videoinput"));
   }, []);
   const closePeer = useCallback((id: string) => {
+    const timer=disconnectTimers.current.get(id);if(timer)clearTimeout(timer);disconnectTimers.current.delete(id);
     peers.current.get(id)?.close(); peers.current.delete(id);peerSlots.current.delete(id);pendingIce.current.delete(id);
     setRemotes((old) => old.filter((r) => r.id !== id));
   }, []);
@@ -154,9 +163,15 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     if(screenTrack.current){void slots.screen.replaceTrack(screenTrack.current);void tuneVideoSender(slots.screen,streamFps,streamQuality)}
     pc.onicecandidate = (event) => { if (event.candidate) void signal(person.id, { type: "candidate", candidate: event.candidate }); };
     pc.ontrack = (event) => {
+      event.track.enabled=true;
       setRemotes((old) => {const existing=old.find(r=>r.id===person.id),stream=existing?.stream||new MediaStream(),incoming=event.streams[0]?.getTracks()||[event.track];incoming.forEach(track=>{if(!stream.getTracks().some(current=>current.id===track.id))stream.addTrack(track)});if(!stream.getTracks().some(current=>current.id===event.track.id))stream.addTrack(event.track);event.track.addEventListener("ended",()=>{try{stream.removeTrack(event.track)}catch{}},{once:true});return [...old.filter((r) => r.id !== person.id), { ...person, stream }];});
     };
-    pc.onconnectionstatechange = () => { if(pc.connectionState==="failed")setError("Voice media could not connect. A TURN relay is required on some mobile networks and restrictive Wi-Fi.");if (["failed", "closed"].includes(pc.connectionState)) closePeer(person.id); };
+    pc.onconnectionstatechange = () => {
+      const oldTimer=disconnectTimers.current.get(person.id);if(oldTimer){clearTimeout(oldTimer);disconnectTimers.current.delete(person.id)}
+      if(pc.connectionState==="disconnected")disconnectTimers.current.set(person.id,setTimeout(()=>{if(pc.connectionState==="disconnected")closePeer(person.id)},8000));
+      if(pc.connectionState==="failed")setError("Voice media is reconnecting. Some mobile networks require a TURN relay for reliable group calls.");
+      if(["failed","closed"].includes(pc.connectionState))closePeer(person.id);
+    };
     return pc;
   }, [closePeer, signal, streamFps, streamQuality]);
   const offer = useCallback(async (person: Person) => {
@@ -185,10 +200,10 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     if (!joined && !local.current) return;
     roomTone("leave");
     setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
-    peers.current.forEach((pc) => pc.close()); peers.current.clear();peerSlots.current.clear();pendingIce.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
+    disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach((pc) => pc.close()); peers.current.clear();peerSlots.current.clear();pendingIce.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
     try { await post(channel, { action: "leave" }); } catch {}
   }, [channel, joined]);
-  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); if(joinedRef.current)void post(channel, { action: "leave" }); }, [channel]);
+  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop());disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear(); peers.current.forEach((p) => p.close()); if(joinedRef.current)void post(channel, { action: "leave" }); }, [channel]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[]);
   useEffect(()=>{const mobile=matchMedia("(pointer: coarse)").matches||navigator.maxTouchPoints>1;setMobileDevice(mobile);if(mobile)setCameraId(current=>current==="default"?"front":current);const legacy=navigator as Navigator&{getDisplayMedia?:typeof navigator.mediaDevices.getDisplayMedia};setScreenShareSupported(typeof navigator.mediaDevices?.getDisplayMedia==="function"||typeof legacy.getDisplayMedia==="function")},[]);
   useEffect(() => { if (localVideo.current) localVideo.current.srcObject = sharing&&screenTrack.current?new MediaStream([screenTrack.current]):local.current; }, [camera, sharing, joined]);
@@ -214,13 +229,14 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
         for (const item of (data.signals || []) as Signal[]){if(seenSignals.current.has(item.id))continue;await handleSignal(item);seenSignals.current.add(item.id)}
         if(seenSignals.current.size>1000)seenSignals.current=new Set([...seenSignals.current].slice(-500));
         for (const p of live) if (p.id !== user.id && !peers.current.has(p.id) && user.id < p.id) await offer(p);
+        await syncPeerTracks();
         for (const id of [...peers.current.keys()]) if (!live.some((p) => p.id === id)){closePeer(id);setRemoteSharing((old)=>{const next=new Set(old);next.delete(id);return next})}
       } catch (e) { if (alive.current) setError((e as Error).message || "Could not refresh the voice room."); }
       finally{polling.current=false}
     };
     void poll(); const timer = setInterval(() => { void post(channel, { action: "heartbeat" }); void poll(); }, 1500);
     return () => clearInterval(timer);
-  }, [channel, joined, user.id, offer, handleSignal, closePeer]);
+  }, [channel, joined, user.id, offer, handleSignal, closePeer, syncPeerTracks]);
 
   async function join() {
     const playback=getVoicePlaybackAudio();void playback.resume();
