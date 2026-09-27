@@ -6,7 +6,6 @@ type Person = { id: string; name: string; reconnecting?:number|boolean; left_at?
 type Signal = { id: string; from: string; body: string; created: number };
 type Remote = Person & { stream: MediaStream };
 type DeviceOption = { deviceId: string; label: string };
-type HistoryItem={id:string;name:string;event:"joined"|"left"|"rejoined";created:number};
 type StreamQuality = "1080" | "1440";
 
 async function tuneVideoSender(sender: RTCRtpSender | undefined, fps: number, quality: StreamQuality) {
@@ -72,7 +71,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     [echoCancellation, setEchoCancellation] = useState(true), [noiseSuppression, setNoiseSuppression] = useState(true),
     [sensitivity, setSensitivity] = useState(55), [remoteSharing, setRemoteSharing] = useState<Set<string>>(new Set()),
     [theaterStream, setTheaterStream] = useState(""), [streamFps,setStreamFps]=useState(60),
-    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080"),[history,setHistory]=useState<HistoryItem[]>([]),[clock,setClock]=useState(Date.now()),
+    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080"),[clock,setClock]=useState(Date.now()),
     [captureWarning,setCaptureWarning]=useState(""),[allowWindowCapture,setAllowWindowCapture]=useState(false);
   const [streamMenu,setStreamMenu]=useState(false);
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
@@ -140,7 +139,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   useEffect(() => {
     if (joined) return;
     let active=true;
-    const watch=async()=>{try{const response=await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Date.now()}`,{cache:"no-store"}),data=await response.json() as Record<string,any>;if(active&&response.ok){setMembers((data.members||[]) as Person[]);setHistory((data.history||[]) as HistoryItem[])}}catch{/* Keep the room usable if presence refresh is interrupted. */}};
+    const watch=async()=>{try{const response=await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Date.now()}`,{cache:"no-store"}),data=await response.json() as Record<string,any>;if(active&&response.ok)setMembers((data.members||[]) as Person[])}catch{/* Keep the room usable if presence refresh is interrupted. */}};
     void watch();const timer=setInterval(watch,2000);return()=>{active=false;clearInterval(timer)};
   },[channel,joined]);
   useEffect(() => {
@@ -149,7 +148,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       try {
         const response = await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${after.current}`, { cache: "no-store" });
         const data = await response.json() as Record<string, any>; if (!response.ok) throw new Error(data.error);
-        after.current = data.now || Date.now(); const list = (data.members || []) as Person[],live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));setHistory((data.history||[]) as HistoryItem[]);
+        after.current = data.now || Date.now(); const list = (data.members || []) as Person[],live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));
         if (knownMembers.current) {
           if (live.some((p) => p.id !== user.id && !knownMembers.current!.has(p.id))) roomTone("join");
           if ([...knownMembers.current].some((id) => id !== user.id && !nextMembers.has(id))) roomTone("leave");
@@ -207,7 +206,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   }
   function setLocalPreview(stream:MediaStream|null=local.current){if(localVideo.current)localVideo.current.srcObject=stream}
   return <section className="voice-room">
-    {!joined ? <div className="voice-empty"><div className="voice-orb"><VolumeIcon /></div><h1>{name}</h1><p>{members.filter(m=>!m.reconnecting).length?`${members.filter(m=>!m.reconnecting).length} ${members.filter(m=>!m.reconnecting).length===1?"person is":"people are"} in voice`:"No one is currently in voice"}</p>{members.length>0&&<div className="voice-waiting-members">{members.map((person)=>{const remaining=person.reconnecting?Math.max(0,10-Math.floor((clock-Number(person.left_at||clock))/1000)):0;return <div key={person.id}><span>{person.name.slice(0,2).toUpperCase()}</span><strong>{person.name}</strong><i className={person.reconnecting?"reconnecting":""}>{person.reconnecting?`Reconnecting · ${remaining}s`:"Connected"}</i></div>})}</div>}<button className="voice-join" disabled={busy} onClick={join}>{busy ? "Joining…" : members.some(m=>m.id===user.id&&m.reconnecting)?"Rejoin Voice":"Join Voice"}</button>{history.length>0&&<div className="voice-history"><strong>Recent lobby activity</strong>{history.slice(0,6).map((item)=><div key={item.id}><span>{item.name}</span><em>{item.event==="rejoined"?"rejoined":item.event==="joined"?"joined":"left"}</em><time>{new Date(item.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time></div>)}</div>}</div> : <>
+    {!joined ? <div className="voice-empty"><div className="voice-orb"><VolumeIcon /></div><h1>{name}</h1><p>{members.filter(m=>!m.reconnecting).length?`${members.filter(m=>!m.reconnecting).length} ${members.filter(m=>!m.reconnecting).length===1?"person is":"people are"} in voice`:"No one is currently in voice"}</p>{members.length>0&&<div className="voice-waiting-members">{members.map((person)=>{const remaining=person.reconnecting?Math.max(0,10-Math.floor((clock-Number(person.left_at||clock))/1000)):0;return <div key={person.id}><span>{person.name.slice(0,2).toUpperCase()}</span><strong>{person.name}</strong><i className={person.reconnecting?"reconnecting":""}>{person.reconnecting?`Reconnecting · ${remaining}s`:"Connected"}</i></div>})}</div>}<button className="voice-join" disabled={busy} onClick={join}>{busy ? "Joining…" : members.some(m=>m.id===user.id&&m.reconnecting)?"Rejoin Voice":"Join Voice"}</button></div> : <>
       {(sharing||remoteSharing.size>0)&&<div className={"stream-deck "+(theaterStream?"theater":"")}>
         {sharing&&<StreamCard id={user.id} name={`${user.name}'s stream`} theater={theaterStream===user.id} onTheater={()=>setTheaterStream(theaterStream===user.id?"":user.id)} onStop={()=>void stopSharingRef.current?.()} onChange={async()=>{await stopSharingRef.current?.();await shareScreen()}}><TrackVideo track={screenTrack.current} muted/></StreamCard>}
         {remotes.filter((r)=>remoteSharing.has(r.id)).map((remote)=>{const focused=theaterStream===remote.id;return <StreamCard key={remote.id} id={remote.id} name={`${remote.name}'s stream`} theater={focused} onTheater={()=>{const active=!focused;setTheaterStream(active?remote.id:"");void signal(remote.id,{type:"stream-watch",active})}} onWatch={(active)=>void signal(remote.id,{type:"stream-watch",active})}><RemoteVideo stream={remote.stream} speakerId={speakerId}/></StreamCard>})}
