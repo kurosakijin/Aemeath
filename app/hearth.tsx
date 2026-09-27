@@ -36,6 +36,7 @@ import {
 import VoiceRoom from "./voice-room";
 import ServerSettings from "./server-settings";
 import MessageMenu from "./message-menu";
+import ImagePreview from "./image-preview";
 import {compressChatImage,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import {
   SidebarProvider,
@@ -708,7 +709,7 @@ export default function Hearth({
                             minute: "2-digit",
                           })}
                         </time>
-                        {isImageMessage(m.body)?<div className={isSpoilerImage(m.body)?"spoiler-image":""}><img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>{e.currentTarget.parentElement?.classList.remove("spoiler-image");void e.currentTarget.requestFullscreen?.()}}/></div>:<p>{m.body}</p>}
+                        {isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}
                       </div>
                       <MessageMenu id={m.id} body={m.body} own={m.user===user.id||owner} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/>
                     </article>
@@ -732,7 +733,7 @@ export default function Hearth({
           {(!isVoice || voiceChat) && <div className={isVoice ? "composer-wrap voice-chat-drawer" : "composer-wrap"}>
             {isVoice && <div className="voice-chat-list">
               <div className="voice-chat-title"><MessageCircle size={17}/><strong>Channel chat</strong><button aria-label="Close channel chat" onClick={()=>setVoiceChat(false)}><X size={17}/></button></div>
-              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{new Date(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<div className={isSpoilerImage(m.body)?"spoiler-image":""}><img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>{e.currentTarget.parentElement?.classList.remove("spoiler-image");void e.currentTarget.requestFullscreen?.()}}/></div>:<p>{m.body}</p>}</div><MessageMenu id={m.id} body={m.body} own={m.user===user.id||owner} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
+              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{new Date(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}</div><MessageMenu id={m.id} body={m.body} own={m.user===user.id||owner} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
             </div>}
             {attachment&&<AttachmentDraft source={imageSource(attachment)} name={attachmentName} spoiler={attachmentSpoiler} onSpoiler={()=>setAttachmentSpoiler(!attachmentSpoiler)} onRemove={()=>{setAttachment("");setAttachmentName("");setAttachmentSpoiler(false)}} onReplace={async(file)=>{setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name)}catch(error){setError((error as Error).message)}finally{setSending(false)}}}/>}<form
               className={"composer " + (!current ? "disabled" : "")}
