@@ -77,12 +77,12 @@ export async function POST(request: Request) {
   try {
     const user = await getChatGPTUser();
     if (!user) return bad("Please sign in to continue.", 401);
-    if (Number(request.headers.get("content-length") || 0) > 12000)
+    if (Number(request.headers.get("content-length") || 0) > 700000)
       return bad("That request is too large.");
     let data;
     try {
       const raw = await request.text();
-      if (raw.length > 12000) return bad("That request is too large.");
+      if (raw.length > 700000) return bad("That request is too large.");
       data = JSON.parse(raw);
     } catch {
       return bad("Invalid request.");
@@ -178,6 +178,17 @@ export async function POST(request: Request) {
     const server = await membership(data.server, uid);
     if (!server || server.owner !== uid)
       return bad("Only the server owner can do that.", 403);
+    if (action === "edit-server") {
+      const name = typeof data.name === "string" ? data.name.trim() : "";
+      const icon = typeof data.icon === "string" ? data.icon : "";
+      const banner = typeof data.banner === "string" ? data.banner : "#ff5ca8";
+      const traits = Array.isArray(data.traits) ? data.traits.map((v:unknown)=>String(v).trim()).filter(Boolean).slice(0,5).join("|") : "";
+      if (!name || name.length > 50) return bad("Choose a server name between 1 and 50 characters.");
+      if (icon.length > 600000 || (icon && !icon.startsWith("data:image/"))) return bad("Choose a valid server image under 400 KB.");
+      if (!/^#[0-9a-f]{6}$/i.test(banner)) return bad("Choose a valid banner color.");
+      await db.prepare("UPDATE servers SET name=?,icon=?,banner=?,traits=? WHERE id=?").bind(name,icon,banner,traits,server.id).run();
+      return json({ok:true});
+    }
     if (action === "channel") {
       const name =
         typeof data.name === "string"

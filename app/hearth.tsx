@@ -27,8 +27,11 @@ import {
   Pencil,
   Trash2,
   PanelRightClose,
+  Bell,
+  Shield,
 } from "lucide-react";
 import VoiceRoom from "./voice-room";
+import ServerSettings from "./server-settings";
 import {
   SidebarProvider,
   Sidebar,
@@ -40,7 +43,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-type Server = { id: string; name: string; owner: string };
+type Server = { id: string; name: string; owner: string; icon?:string; banner?:string; traits?:string };
 type Channel = {
   id: string;
   name: string;
@@ -98,6 +101,7 @@ export default function Hearth({
     [showMembers, setShowMembers] = useState(true),
     [mobileMembers, setMobileMembers] = useState(false);
   const [voiceChat, setVoiceChat] = useState(false);
+  const [serverMenu, setServerMenu] = useState(false);
   const [channelType, setChannelType] = useState<"text" | "voice" | "forum">(
       "text",
     ),
@@ -340,6 +344,7 @@ export default function Hearth({
         ? "/"
         : window.location.pathname + window.location.search,
     );
+  if (modal === "server-settings" && server) return <ServerSettings server={server} members={members} onClose={()=>setModal("")} onInvite={()=>{setModal("");void invite()}} onSave={async(value)=>{await api("",{action:"edit-server",server:server.id,...value});await refreshServers(server.id)}}/>;
   return (
     <SidebarProvider>
       <div className="hearth-app">
@@ -370,7 +375,7 @@ export default function Hearth({
                   setMobile(false);
                 }}
               >
-                {initials(s.name)}
+                {s.icon ? <img className="server-rail-image" src={s.icon} alt=""/> : initials(s.name)}
               </button>
             ))
           ) : (
@@ -394,7 +399,9 @@ export default function Hearth({
         >
           <SidebarContent>
             <header className="server-title">
-              <span>{server?.name || "Your space"}</span>
+              <button className="server-title-menu-button" onClick={()=>server&&setServerMenu(!serverMenu)} aria-expanded={serverMenu}>
+                <span>{server?.name || "Your space"}</span>{server&&<ChevronDown size={16}/>} 
+              </button>
               <button
                 aria-label="Close channels"
                 onClick={() => setMobile(false)}
@@ -402,6 +409,15 @@ export default function Hearth({
                 {mobile ? <X size={17} /> : <Lock size={15} />}
               </button>
             </header>
+            {serverMenu&&server&&<div className="server-menu">
+              <button onClick={()=>{setServerMenu(false);void invite()}}><UserPlus size={17}/> Invite to server</button>
+              {owner&&<><button onClick={()=>{setServerMenu(false);setModal("server-settings")}}><Settings size={17}/> Server settings</button><button onClick={()=>{setServerMenu(false);openChannel()}}><Plus size={17}/> Create channel</button></>}
+              <div/>
+              <button><Bell size={17}/> Notification settings</button>
+              <button><Shield size={17}/> Privacy settings</button>
+              <div/>
+              <button onClick={()=>{void navigator.clipboard.writeText(server.id);setServerMenu(false)}}><Copy size={17}/> Copy server ID</button>
+            </div>}
             <div className="server-intro">
               <span className="eyebrow">A LITTLE CLOSER</span>
               <h2>
