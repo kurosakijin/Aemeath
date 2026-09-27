@@ -1,17 +1,13 @@
 "use client";
-import {Bookmark,Copy,Flag,MessageSquareReply,MoreHorizontal,Trash2,Volume2} from "lucide-react";
-import {useState} from "react";
+import {Bookmark,Copy,Flag,MessageSquareReply,MoreHorizontal,Trash2,Volume2,X} from "lucide-react";
+import {useEffect,useRef,useState} from "react";
+import {createPortal} from "react-dom";
 export default function MessageMenu({id,body,own,onReply,onDelete,onReport}:{id:string;body:string;own:boolean;onReply:()=>void;onDelete:()=>void;onReport:()=>void}){
- const [open,setOpen]=useState(false),[reaction,setReaction]=useState("");
- const text=body.startsWith("aemeath:image:")?"Shared image":body;
- return <div className="message-actions"><button className="message-more" aria-label="Message actions" onClick={()=>setOpen(!open)}><MoreHorizontal size={18}/></button>{reaction&&<span className="message-reaction">{reaction}</span>}{open&&<div className="message-menu">
-  <div className="reaction-row">{["✅","😆","💯","❤️"].map(item=><button key={item} onClick={()=>{setReaction(item);setOpen(false)}}>{item}</button>)}</div>
-  <button onClick={()=>{onReply();setOpen(false)}}><MessageSquareReply/> Reply</button>
-  <button onClick={()=>{void navigator.clipboard.writeText(text);setOpen(false)}}><Copy/> Copy text</button>
-  <button onClick={()=>{localStorage.setItem("aemeath-bookmark-"+id,text);setOpen(false)}}><Bookmark/> Bookmark message</button>
-  <button onClick={()=>{speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(text));setOpen(false)}}><Volume2/> Speak message</button>
-  <button onClick={()=>{void navigator.clipboard.writeText(id);setOpen(false)}}><Copy/> Copy message ID</button>
-  {own&&<button className="danger" onClick={()=>{onDelete();setOpen(false)}}><Trash2/> Delete message</button>}
-  {!own&&<button className="danger" onClick={()=>{onReport();setOpen(false)}}><Flag/> Report message</button>}
- </div>}</div>
+ const [open,setOpen]=useState(false),[reaction,setReaction]=useState(""),[position,setPosition]=useState({top:70,left:16});
+ const trigger=useRef<HTMLButtonElement>(null),panel=useRef<HTMLDivElement>(null),text=body.startsWith("aemeath:image:")?"Shared image":body;
+ const show=()=>{const rect=trigger.current?.getBoundingClientRect();if(rect){const width=244,left=Math.max(12,Math.min(innerWidth-width-12,rect.right-width)),height=390,top=innerWidth<701?Math.max(12,innerHeight-height-78):Math.max(12,Math.min(innerHeight-height-12,rect.bottom+7));setPosition({top,left})}setOpen(true)};
+ useEffect(()=>{if(!open)return;const close=(event:MouseEvent)=>{if(!panel.current?.contains(event.target as Node)&&!trigger.current?.contains(event.target as Node))setOpen(false)};addEventListener("mousedown",close);return()=>removeEventListener("mousedown",close)},[open]);
+ const done=(action:()=>void)=>{action();setOpen(false)};
+ const menu=<div ref={panel} className="aemeath-message-popover" style={{top:position.top,left:position.left}} role="menu"><header><strong>Message actions</strong><button onClick={()=>setOpen(false)}><X size={16}/></button></header><div className="aemeath-reactions">{["✅","😆","💯","❤️"].map(item=><button key={item} onClick={()=>done(()=>setReaction(item))}>{item}</button>)}</div><div className="aemeath-action-list"><button onClick={()=>done(onReply)}><MessageSquareReply/><span>Reply</span></button><button onClick={()=>done(()=>void navigator.clipboard.writeText(text))}><Copy/><span>Copy text</span></button><button onClick={()=>done(()=>localStorage.setItem("aemeath-bookmark-"+id,text))}><Bookmark/><span>Bookmark message</span></button><button onClick={()=>done(()=>{speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(text))})}><Volume2/><span>Speak message</span></button><button onClick={()=>done(()=>void navigator.clipboard.writeText(id))}><Copy/><span>Copy message ID</span></button>{own?<button className="danger" onClick={()=>done(onDelete)}><Trash2/><span>Delete message</span></button>:<button className="danger" onClick={()=>done(onReport)}><Flag/><span>Report message</span></button>}</div></div>;
+ return <div className="message-actions"><button ref={trigger} className="message-more" aria-label="Message actions" onClick={()=>open?setOpen(false):show()}><MoreHorizontal size={18}/></button>{reaction&&<span className="message-reaction">{reaction}</span>}{open&&typeof document!=="undefined"&&createPortal(menu,document.body)}</div>
 }
