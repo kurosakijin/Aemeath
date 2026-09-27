@@ -304,7 +304,7 @@ function Inbox({
   return (
     <SidebarProvider>
       <div className="aemeath-app dm-app">
-        <nav className="server-rail" aria-label="Home and servers">
+        <nav className={`server-rail${mobile?" mobile-open":""}`} aria-label="Home and servers">
           <div className="brand-icon" title="Aemeath">
             <Flame size={27} />
           </div>
@@ -340,8 +340,8 @@ function Inbox({
           >
             <Plus />
           </button>
-          <span className="rail-footer">h</span>
         </nav>
+        <button className={`mobile-drawer-backdrop${mobile?" open":""}`} aria-label="Close navigation" onClick={()=>setMobile(false)}/>
         <Sidebar
           collapsible="none"
           className={

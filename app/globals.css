@@ -618,6 +618,7 @@ html.desktop-app .signed-in-downloads{display:none}
   background: transparent;
   color: #c9c8cd;
 }
+.mobile-drawer-backdrop{display:none}
 .form-input {
   width: 100%;
   background: #191b1f;
@@ -826,22 +827,42 @@ html.desktop-app .signed-in-downloads{display:none}
   }
 }
 @media (max-width: 720px) {
+  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none}
   .server-rail {
-    width: 62px;
-    padding: 18px 7px;
+    position:fixed;
+    z-index:42;
+    left:0;
+    top:0;
+    bottom:0;
+    width:64px;
+    padding:max(12px,env(safe-area-inset-top)) 7px max(12px,env(safe-area-inset-bottom));
+    gap:9px;
+    transform:translateX(-100%);
+    transition:transform .22s cubic-bezier(.22,1,.36,1);
+    box-shadow:10px 0 35px #0008;
   }
+  .server-rail.mobile-open{transform:translateX(0)}
+  .brand-icon{height:42px}
+  .rail-line{margin:1px 0}
+  .server-rail .server-icon.active:before{left:-11px}
+  .server-rail .rail-footer{display:none}
+  .mobile-drawer-backdrop{display:block;position:fixed;z-index:38;inset:0;border:0;background:#050407a8;opacity:0;pointer-events:none;backdrop-filter:blur(2px);transition:opacity .2s}
+  .mobile-drawer-backdrop.open{opacity:1;pointer-events:auto}
   .server-icon {
     width: 42px;
     height: 42px;
+    border-radius:14px;
   }
   .channel-sidebar {
     position: fixed !important;
-    left: 62px;
+    left: 64px;
     top: 0;
     bottom: 0;
-    z-index: 30;
-    width: 225px !important;
-    box-shadow: 15px 0 60px #0007;
+    z-index: 42;
+    width:min(280px,calc(100vw - 82px)) !important;
+    box-shadow: 18px 0 55px #0009;
+    border-radius:0 14px 14px 0;
+    overflow:hidden;
   }
   .channel-sidebar.mobile-hidden {
     display: none !important;
@@ -850,13 +871,17 @@ html.desktop-app .signed-in-downloads{display:none}
     display: flex;
   }
   .chat-header {
-    padding: 0 17px;
-    gap: 8px;
-    height: 65px;
+    padding:0 10px;
+    gap:7px;
+    height:56px;
+    min-width:0;
   }
-  .header-right {
-    font-size: 11px;
-  }
+  .chat-header .mobile-menu{width:36px;height:36px;flex:0 0 36px;align-items:center;justify-content:center;border-radius:10px;background:#ffffff08}
+  .chat-header>svg{width:19px;height:19px}
+  .chat-header strong{min-width:0;max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+  .chat-header .toolbar-button{margin-left:auto;width:36px;height:36px;align-items:center;justify-content:center;border-radius:10px}
+  .dm-header-actions{margin-left:auto}
+  .header-right{display:none!important}
   .header-divider {
     display: none;
   }
@@ -889,14 +914,30 @@ html.desktop-app .signed-in-downloads{display:none}
     display: flex;
     position: fixed;
     right: 0;
-    top: 65px;
+    top: 56px;
     bottom: 0;
     z-index: 20;
     box-shadow: -20px 0 60px #0007;
   }
-  .server-title {
-    height: 65px;
-  }
+  .server-title{height:56px;padding:0 14px}
+  .signed-in-downloads{display:none}
+  .chat-main{width:100vw;min-width:0}
+  .conversation{padding:16px 12px}
+  .composer-wrap{padding:8px 9px max(8px,env(safe-area-inset-bottom))}
+  .composer{min-height:48px;border-radius:13px;padding:7px 9px}
+  .voice-room{width:100%;overflow:hidden}
+  .voice-empty{width:100%;max-width:520px;padding:62px 16px 82px}
+  .voice-empty h1{font-size:32px;margin-top:14px}
+  .voice-empty p{font-size:14px;margin-bottom:18px}
+  .voice-orb{width:64px;height:64px;border-radius:20px}
+  .voice-waiting-members{width:100%;max-width:340px;margin-bottom:16px}
+  .voice-waiting-members>div{grid-template-columns:34px minmax(0,1fr) auto;padding:8px 9px}
+  .voice-waiting-members span{width:34px;height:34px}
+  .voice-error{z-index:25;top:8px;left:8px;right:8px;max-width:none;padding:9px 11px;border:1px solid #ffffff12;border-radius:11px;font-size:12px;line-height:1.4;box-shadow:0 10px 30px #0005}
+  .voice-controls{bottom:max(12px,env(safe-area-inset-bottom));gap:6px;padding:7px;border-radius:16px;max-width:calc(100vw - 12px)}
+  .voice-controls button{width:42px;height:42px;border-radius:12px}.voice-controls button svg{width:21px;height:21px}
+  .voice-status{top:9px;left:9px;padding:5px 7px;border-radius:8px;background:#100b12b8;font-size:11px}
+  .voice-takeover{top:0;font-size:11px}
 }
 .modal-form {
   display: flex;

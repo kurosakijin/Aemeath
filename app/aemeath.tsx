@@ -380,7 +380,7 @@ export default function Aemeath({
   return (
     <SidebarProvider>
       <div className="aemeath-app">
-        <nav className="server-rail" aria-label="Servers">
+        <nav className={`server-rail${mobile?" mobile-open":""}`} aria-label="Servers">
           <div className="brand-icon" title="Aemeath">
             <Flame size={27} />
           </div>
@@ -423,8 +423,8 @@ export default function Aemeath({
           >
             <Plus />
           </button>
-          <span className="rail-footer">h</span>
         </nav>
+        <button className={`mobile-drawer-backdrop${mobile?" open":""}`} aria-label="Close navigation" onClick={()=>setMobile(false)}/>
         <Sidebar
           collapsible="none"
           className={"channel-sidebar " + (!mobile ? "mobile-hidden" : "")}
