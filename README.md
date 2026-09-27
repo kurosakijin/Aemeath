@@ -92,3 +92,15 @@ npm run desktop:build  # Create the Windows installer
 ```
 
 The installer is written to `release/`. Set `AEMEATH_APP_URL` before launching if the desktop client should use a different Aemeath deployment.
+
+## Android app
+
+The Capacitor Android client lives in `android/` and connects to the production Aemeath service. Camera, microphone, image selection, notifications, and media-projection permissions are declared in its native manifest.
+
+```bash
+npm run android:sync   # Copy web configuration and update native plugins
+npm run android:open   # Open the project in Android Studio
+npm run android:build  # Build a debug APK with the installed Android SDK
+```
+
+The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
