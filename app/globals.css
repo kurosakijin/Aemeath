@@ -1819,3 +1819,17 @@ svg {
 .voice-waiting-members i.reconnecting{color:#ffadcf}
 .capture-warning{position:absolute;z-index:11;left:50%;top:62px;transform:translateX(-50%);width:min(620px,calc(100% - 28px));display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid #9b6a36;border-radius:11px;background:#3e2b19f2;color:#ffd9ad;box-shadow:0 12px 35px #0007;font-size:12px;line-height:1.45}.capture-warning>svg{flex:0 0 auto}.capture-warning button{margin-left:auto;border:0;background:transparent;color:#ffd9ad;cursor:pointer}
 .stream-control{position:relative}.stream-control>button{display:flex!important;gap:2px}.stream-control-menu,.stream-card-menu{position:absolute;z-index:30;min-width:190px;padding:7px;border:1px solid #4a3d46;border-radius:11px;background:#211d22;box-shadow:0 16px 45px #000a}.stream-control-menu{bottom:61px;left:50%;transform:translateX(-50%)}.voice-controls .stream-control-menu button,.stream-card-menu button{width:100%;height:auto;display:flex;justify-content:flex-start;gap:8px;padding:9px 10px;border-radius:7px;background:transparent;color:#e9e4e8;font-size:12px;white-space:nowrap}.voice-controls .stream-control-menu button:hover,.stream-card-menu button:hover{background:#47283a;color:#ff9eca}.stream-control-menu>div{height:1px;background:#42353e;margin:5px}.stream-card header{position:relative}.stream-card-menu{top:39px;right:7px}.stream-card-menu button{border:0;cursor:pointer}.stream-card-menu button:first-child{color:#ff7184}.stream-video{cursor:zoom-in}.stream-card.expanded .stream-video{cursor:zoom-out}
+
+/* Cinema arrangement for active streams */
+.voice-room:has(.stream-deck){display:block;position:relative;background:#09070a}
+.voice-room:has(.stream-deck) .stream-deck:not(.theater){position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:18px 22px 220px;overflow:hidden}
+.voice-room:has(.stream-deck) .stream-deck:not(.theater) .stream-card{width:min(1180px,100%);max-height:100%;display:flex;flex-direction:column}
+.voice-room:has(.stream-deck) .stream-deck:not(.theater) .stream-video{flex:1;min-height:0;aspect-ratio:16/9;max-height:calc(100dvh - 315px)}
+.voice-room:has(.stream-deck) .stream-deck:not(.theater) .stream-video video{display:block;background:#000;object-fit:contain}
+.voice-room:has(.stream-deck) .voice-grid.with-streams{position:absolute;z-index:7;left:50%;bottom:91px;transform:translateX(-50%);width:auto;max-width:calc(100% - 28px);display:flex;gap:9px;padding:0;overflow-x:auto;justify-content:flex-start}
+.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{width:170px;min-width:170px;height:96px;aspect-ratio:auto;border-radius:12px}
+.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-avatar{width:48px;height:48px;font-size:14px}
+.voice-room:has(.stream-deck) .voice-status{z-index:8;top:12px;left:14px;background:#0d0910cc;padding:6px 9px;border-radius:8px}
+.voice-room:has(.stream-deck) .voice-controls{z-index:10}
+@media(max-height:650px){.voice-room:has(.stream-deck) .stream-deck:not(.theater){padding-bottom:175px}.voice-room:has(.stream-deck) .voice-grid.with-streams{bottom:79px}.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{width:135px;min-width:135px;height:76px}.voice-room:has(.stream-deck) .stream-deck:not(.theater) .stream-video{max-height:calc(100dvh - 255px)}}
+@media(max-width:700px){.voice-room:has(.stream-deck) .stream-deck:not(.theater){padding:8px 8px 205px}.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{width:135px;min-width:135px;height:80px}}

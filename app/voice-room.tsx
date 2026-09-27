@@ -188,6 +188,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   async function shareScreen() {
     if (!local.current || screenTrack.current) return;
     try {
+      setError("");
       const size=streamQuality==="1440"?{width:2560,height:1440}:{width:1920,height:1080};
       setCaptureWarning("");
       const displayOptions={video:{width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:streamFps,max:streamFps},displaySurface:"monitor"},audio:true,selfBrowserSurface:"exclude",surfaceSwitching:"include",systemAudio:"include"} as DisplayMediaStreamOptions;
