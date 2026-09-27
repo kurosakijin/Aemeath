@@ -124,15 +124,16 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     [echoCancellation, setEchoCancellation] = useState(true), [noiseSuppression, setNoiseSuppression] = useState(true),
     [sensitivity, setSensitivity] = useState(55), [remoteSharing, setRemoteSharing] = useState<Set<string>>(new Set()),
     [theaterStream, setTheaterStream] = useState(""), [streamFps,setStreamFps]=useState(60),
-    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080"),[clock,setClock]=useState(Date.now()),[mobileDevice,setMobileDevice]=useState(false),[screenShareSupported,setScreenShareSupported]=useState(false);
+    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080"),[clock,setClock]=useState(Date.now()),[mobileDevice,setMobileDevice]=useState(false),[screenShareSupported,setScreenShareSupported]=useState(false),[takenOver,setTakenOver]=useState(false);
   const [streamMenu,setStreamMenu]=useState(false);
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), peerSlots=useRef(new Map<string,PeerSlots>()), names = useRef(new Map<string, string>()),
     pendingIce=useRef(new Map<string,RTCIceCandidateInit[]>()),seenSignals=useRef(new Set<string>()),polling=useRef(false),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
-    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>());
+    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>()),voiceSession=useRef(crypto.randomUUID());
 
-  const signal = useCallback((to: string, body: unknown) => post(channel, { action: "signal", to, body: JSON.stringify(body) }), [channel]);
+  const voicePost=useCallback((data:Record<string,unknown>)=>post(channel,{...data,session:voiceSession.current}),[channel]);
+  const signal = useCallback((to: string, body: unknown) => voicePost({ action: "signal", to, body: JSON.stringify(body) }), [voicePost]);
   const syncPeerTracks=useCallback(async()=>{
     const audio=screenAudioTrack.current||microphoneTrack.current,camera=cameraTrack.current,screen=screenTrack.current;
     await Promise.allSettled([...peerSlots.current.values()].map(async slots=>{
@@ -201,9 +202,9 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     roomTone("leave");
     setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
     disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach((pc) => pc.close()); peers.current.clear();peerSlots.current.clear();pendingIce.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
-    try { await post(channel, { action: "leave" }); } catch {}
-  }, [channel, joined]);
-  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop());disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear(); peers.current.forEach((p) => p.close()); if(joinedRef.current)void post(channel, { action: "leave" }); }, [channel]);
+    try { await voicePost({ action: "leave" }); } catch {}
+  }, [joined,voicePost]);
+  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop());disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear(); peers.current.forEach((p) => p.close()); if(joinedRef.current)void voicePost({ action: "leave" }); }, [voicePost]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[]);
   useEffect(()=>{const mobile=matchMedia("(pointer: coarse)").matches||navigator.maxTouchPoints>1;setMobileDevice(mobile);if(mobile)setCameraId(current=>current==="default"?"front":current);const legacy=navigator as Navigator&{getDisplayMedia?:typeof navigator.mediaDevices.getDisplayMedia};setScreenShareSupported(typeof navigator.mediaDevices?.getDisplayMedia==="function"||typeof legacy.getDisplayMedia==="function")},[]);
   useEffect(() => { if (localVideo.current) localVideo.current.srcObject = sharing&&screenTrack.current?new MediaStream([screenTrack.current]):local.current; }, [camera, sharing, joined]);
@@ -218,8 +219,9 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     const poll = async () => {
       if(polling.current)return;polling.current=true;
       try {
-        const response = await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Math.max(0,after.current-3000)}`, { cache: "no-store" });
+        const response = await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Math.max(0,after.current-3000)}&session=${encodeURIComponent(voiceSession.current)}`, { cache: "no-store" });
         const data = await response.json() as Record<string, any>; if (!response.ok) throw new Error(data.error);
+        if(data.displaced){roomTone("leave");joinedRef.current=false;setJoined(false);setTakenOver(true);captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;local.current?.getTracks().forEach(track=>track.stop());local.current=null;microphoneTrack.current=null;cameraTrack.current=null;screenTrack.current=null;screenAudioTrack.current=null;disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach(peer=>peer.close());peers.current.clear();peerSlots.current.clear();pendingIce.current.clear();setRemotes([]);setRemoteSharing(new Set());setCamera(false);setSharing(false);setError("");return}
         after.current = Math.max(after.current,data.now||Date.now()); const list = (data.members || []) as Person[],live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));
         if (knownMembers.current) {
           const joinedPerson=live.find((p) => p.id !== user.id && !knownMembers.current!.has(p.id));if(joinedPerson)void notifyAemeath({key:`voice-${channel}-${joinedPerson.id}-${Date.now()}`,title:`${joinedPerson.name} joined ${name}`,body:"Someone joined your voice lobby",kind:"join"})
@@ -234,20 +236,20 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       } catch (e) { if (alive.current) setError((e as Error).message || "Could not refresh the voice room."); }
       finally{polling.current=false}
     };
-    void poll(); const timer = setInterval(() => { void post(channel, { action: "heartbeat" }); void poll(); }, 1500);
+    void poll(); const timer = setInterval(() => { void voicePost({ action: "heartbeat" }); void poll(); }, 1500);
     return () => clearInterval(timer);
-  }, [channel, joined, user.id, offer, handleSignal, closePeer, syncPeerTracks]);
+  }, [channel, joined, user.id, offer, handleSignal, closePeer, syncPeerTracks,voicePost]);
 
   async function join() {
     const playback=getVoicePlaybackAudio();void playback.resume();
-    setBusy(true); setError("");
+    setBusy(true); setError("");setTakenOver(false);
     try {
       const config = await fetch("/api/calls?config=1").then((r) => r.json()) as Record<string, any>; ice.current = config.iceServers || [];
       let listenOnly=false;
       if(!navigator.mediaDevices?.getUserMedia){local.current=new MediaStream();listenOnly=true}
       else try { local.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation, noiseSuppression, deviceId: micId === "default" ? undefined : { exact: micId } }, video: false });microphoneTrack.current=local.current.getAudioTracks()[0]||null;if(microphoneTrack.current)microphoneTrack.current.contentHint="speech";await refreshDevices(); }
       catch(e){if(mediaPermissionDenied(e)||(e instanceof DOMException&&e.name==="NotFoundError")){local.current=new MediaStream();listenOnly=true}else throw e}
-      after.current = Date.now(); await post(channel, { action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true);joinedRef.current=true; roomTone("join");
+      after.current = Date.now(); await voicePost({ action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true);joinedRef.current=true; roomTone("join");
       setMuted(listenOnly);if(listenOnly)setError("Joined in listen-only mode. Use the microphone button when you are ready to allow access.");
     } catch (e) { setError(e instanceof Error ? e.message : "Microphone access is required to join."); local.current?.getTracks().forEach((t) => t.stop()); local.current = null; }
     finally { setBusy(false); }
@@ -307,6 +309,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   function setLocalPreview(stream:MediaStream|null=local.current){if(localVideo.current)localVideo.current.srcObject=stream}
   const visibleMembers=members.filter(member=>!member.reconnecting),participantCount=Math.min(30,Math.max(1,visibleMembers.length)),columns=participantCount<=9?3:participantCount<=16?4:participantCount<=25?5:6,rows=participantCount<=9?3:participantCount<=16?4:5,hasStreams=sharing||camera||remoteSharing.size>0;
   return <section className={`voice-room${joined?" joined":""}${joined&&!hasStreams?" no-streams":""}`} style={{"--voice-columns":columns,"--voice-rows":rows} as React.CSSProperties}>
+    {takenOver&&<div className="voice-takeover" role="alert"><span>Your voice has been disconnected because you connected at another location.</span><button onClick={()=>void join()} disabled={busy}>{busy?"Reconnecting…":"Reconnect"}</button><button className="dismiss" aria-label="Dismiss" onClick={()=>setTakenOver(false)}><X size={18}/></button></div>}
     {!joined ? <div className="voice-empty"><div className="voice-orb"><VolumeIcon /></div><h1>{name}</h1><p>{members.filter(m=>!m.reconnecting).length?`${members.filter(m=>!m.reconnecting).length} ${members.filter(m=>!m.reconnecting).length===1?"person is":"people are"} in voice`:"No one is currently in voice"}</p>{members.length>0&&<div className="voice-waiting-members">{members.map((person)=>{const remaining=person.reconnecting?Math.max(0,10-Math.floor((clock-Number(person.left_at||clock))/1000)):0;return <div key={person.id}><span>{person.name.slice(0,2).toUpperCase()}</span><strong>{person.name}</strong><i className={person.reconnecting?"reconnecting":""}>{person.reconnecting?`Reconnecting · ${remaining}s`:"Connected"}</i></div>})}</div>}<button className="voice-join" disabled={busy} onClick={join}>{busy ? "Joining…" : members.some(m=>m.id===user.id&&m.reconnecting)?"Rejoin Voice":"Join Voice"}</button></div> : <>
       {(sharing||camera||remoteSharing.size>0)&&<div className={"stream-deck "+(theaterStream?"theater":"")}>
         {sharing&&<StreamCard id={user.id} name={`${user.name}'s stream`} theater={theaterStream===user.id} onTheater={()=>setTheaterStream(theaterStream===user.id?"":user.id)} onStop={()=>void stopSharingRef.current?.()} onChange={async()=>{await stopSharingRef.current?.();await shareScreen()}}><TrackVideo track={screenTrack.current} muted/></StreamCard>}
