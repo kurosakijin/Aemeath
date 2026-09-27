@@ -2002,3 +2002,45 @@ svg {
 
 /* Fixed-capacity voice participant matrix */
 .voice-room.joined{height:100%;min-height:0;overflow:hidden;overscroll-behavior:none}.voice-room.joined.no-streams{position:relative;display:block}.voice-room.joined.no-streams .voice-grid{position:absolute;inset:0;width:100%;height:100%;display:grid;grid-template-columns:repeat(var(--voice-columns),minmax(0,1fr));grid-template-rows:repeat(var(--voice-rows),minmax(0,1fr));gap:10px;padding:54px 20px 94px;overflow:hidden;align-content:stretch}.voice-room.joined.no-streams .voice-tile{width:100%;height:100%;min-width:0;min-height:0;aspect-ratio:auto;border-radius:13px}.voice-room.joined.no-streams .voice-avatar{width:clamp(38px,5vw,70px);height:clamp(38px,5vw,70px);font-size:clamp(13px,1.7vw,22px)}.voice-room.joined .voice-controls{z-index:20}.voice-room.joined .voice-status{z-index:20}@media(max-width:700px){.voice-room.joined.no-streams .voice-grid{gap:6px;padding:48px 7px 82px}.voice-room.joined.no-streams .voice-tile>span:last-child{font-size:10px;left:6px;bottom:6px}.voice-room.joined.no-streams .voice-avatar{width:36px;height:36px;font-size:12px}}
+
+/* Motion and interaction system */
+:root{--motion-ease:cubic-bezier(.22,1,.36,1);--motion-fast:150ms;--motion-normal:280ms}
+.server-icon,.channel,.dm-person,.toolbar-button,.profile-button,.primary,.join-link,.voice-controls button,.stream-card header button,.composer button,.app-downloads a,.message-reaction-bar,.aemeath-action-list button{transition:transform var(--motion-fast) ease,background-color var(--motion-fast) ease,color var(--motion-fast) ease,border-color var(--motion-fast) ease,box-shadow var(--motion-fast) ease,opacity var(--motion-fast) ease}
+.server-icon:hover,.toolbar-button:hover,.profile-button:hover,.voice-controls>button:hover,.voice-controls>.stream-control>button:hover{transform:translateY(-2px)}
+.server-icon:active,.toolbar-button:active,.profile-button:active,.primary:active,.voice-controls button:active,.app-downloads a:active{transform:scale(.94)}
+.channel:hover,.dm-person:hover{transform:translateX(3px)}
+.channel.active{box-shadow:inset 3px 0 #ff5ca8}
+.primary:hover,.auth-submit:hover,.voice-join:hover{box-shadow:0 12px 30px #ff4fa646!important;transform:translateY(-1px)}
+.composer:focus-within{border-color:#ff5ca899;box-shadow:0 0 0 3px #ff5ca817,0 10px 32px #0003}
+.account-field input,.voice-settings select,.composer{transition:border-color var(--motion-fast) ease,box-shadow var(--motion-fast) ease,background-color var(--motion-fast) ease}
+.account-field input:focus,.voice-settings select:focus{border-color:#ff5ca8;box-shadow:0 0 0 3px #ff5ca81c}
+.voice-avatar{transition:transform var(--motion-normal) var(--motion-ease),box-shadow var(--motion-normal) ease}.voice-tile:hover .voice-avatar{transform:scale(1.055);box-shadow:0 8px 30px #ff5ca830}
+
+@media(prefers-reduced-motion:no-preference){
+  @keyframes aemeath-fade-up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes aemeath-fade-left{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
+  @keyframes aemeath-pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+  @keyframes aemeath-slide-panel{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes aemeath-message-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  @keyframes aemeath-live{0%,100%{box-shadow:0 0 0 0 #f13d9166}50%{box-shadow:0 0 0 6px #f13d9100}}
+  @keyframes aemeath-orb{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+  .auth-brand{animation:aemeath-fade-left .45s var(--motion-ease) both}
+  .auth-story-copy>*{animation:aemeath-fade-up .5s var(--motion-ease) both}
+  .auth-story-copy>:nth-child(2){animation-delay:70ms}.auth-story-copy>:nth-child(3){animation-delay:130ms}.auth-story-copy>:nth-child(4){animation-delay:190ms}
+  .auth-local-note{animation:aemeath-fade-up .5s .22s var(--motion-ease) both}
+  .auth-card{animation:aemeath-fade-up .52s .08s var(--motion-ease) both}
+  .auth-footer{animation:aemeath-fade-up .45s .2s var(--motion-ease) both}
+  .server-icon{animation:aemeath-pop .3s var(--motion-ease) both}.server-icon:nth-of-type(2){animation-delay:40ms}.server-icon:nth-of-type(3){animation-delay:80ms}.server-icon:nth-of-type(4){animation-delay:120ms}
+  .message,.voice-chat-message{animation:aemeath-message-in .25s var(--motion-ease) both}
+  .message-menu,.aemeath-message-popover,.stream-control-menu,.stream-card-menu{animation:aemeath-pop .18s var(--motion-ease) both;transform-origin:top right}
+  .voice-settings{animation:aemeath-slide-panel .26s var(--motion-ease) both}
+  .voice-tile,.stream-card{animation:aemeath-pop .3s var(--motion-ease) both}
+  .stream-card header b,.streaming-badge{animation:aemeath-live 1.8s ease-in-out infinite}
+  .voice-orb{animation:aemeath-orb 2.8s ease-in-out infinite}
+  .image-lightbox{animation:aemeath-pop .2s ease-out both}.image-lightbox-stage img{animation:aemeath-pop .3s var(--motion-ease) both}
+  [data-slot="dialog-overlay"]{animation:aemeath-pop .18s ease-out both}
+  [data-slot="dialog-content"]{animation:aemeath-slide-panel .25s var(--motion-ease) both}
+  .saved-message,.account-error,.voice-error{animation:aemeath-fade-up .22s var(--motion-ease) both}
+}
+
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
