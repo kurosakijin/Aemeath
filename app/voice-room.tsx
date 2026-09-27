@@ -55,7 +55,8 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     [sensitivity, setSensitivity] = useState(55);
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), names = useRef(new Map<string, string>()),
-    after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null);
+    after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
+    screenTrack = useRef<MediaStreamTrack | null>(null), cameraTrack = useRef<MediaStreamTrack | null>(null);
 
   const signal = useCallback((to: string, body: unknown) => post(channel, { action: "signal", to, body: JSON.stringify(body) }), [channel]);
   const refreshDevices = useCallback(async () => {
@@ -72,7 +73,9 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     const existing = peers.current.get(person.id); if (existing) return existing;
     names.current.set(person.id, person.name);
     const pc = new RTCPeerConnection({ iceServers: ice.current }); peers.current.set(person.id, pc);
-    local.current?.getTracks().forEach((track) => pc.addTrack(track, local.current!));
+    local.current?.getAudioTracks().forEach((track) => pc.addTrack(track, local.current!));
+    const activeVideo=screenTrack.current||cameraTrack.current;
+    if(activeVideo)pc.addTrack(activeVideo,new MediaStream([activeVideo]));
     pc.onicecandidate = (event) => { if (event.candidate) void signal(person.id, { type: "candidate", candidate: event.candidate }); };
     pc.ontrack = (event) => {
       const stream = event.streams[0] || new MediaStream([event.track]);
@@ -106,7 +109,13 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     try { await post(channel, { action: "leave" }); } catch {}
   }, [channel, joined]);
   useEffect(() => () => { alive.current = false; local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); void post(channel, { action: "leave" }); }, [channel]);
-  useEffect(() => { if (localVideo.current) localVideo.current.srcObject = local.current; }, [camera, sharing, joined]);
+  useEffect(() => { if (localVideo.current) localVideo.current.srcObject = sharing&&screenTrack.current?new MediaStream([screenTrack.current]):local.current; }, [camera, sharing, joined]);
+  useEffect(() => {
+    if (joined) return;
+    let active=true;
+    const watch=async()=>{try{const response=await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Date.now()}`,{cache:"no-store"}),data=await response.json() as Record<string,any>;if(active&&response.ok)setMembers((data.members||[]) as Person[]);}catch{/* Keep the room usable if presence refresh is interrupted. */}};
+    void watch();const timer=setInterval(watch,2000);return()=>{active=false;clearInterval(timer)};
+  },[channel,joined]);
   useEffect(() => {
     if (!joined) return;
     const poll = async () => {
@@ -141,21 +150,30 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   async function renegotiate() { for (const p of members) if (p.id !== user.id) await offer(p); }
   async function toggleCamera() {
     if (!local.current) return;
-    const old = local.current.getVideoTracks().find((t) => t.label !== "screen");
-    if (old) { old.stop(); local.current.removeTrack(old); peers.current.forEach((pc) => pc.getSenders().find((s) => s.track === old)?.replaceTrack(null)); setCamera(false); return; }
-    try { const media = await navigator.mediaDevices.getUserMedia({ video: { deviceId: cameraId === "default" ? undefined : { exact: cameraId }, facingMode: cameraId === "default" ? "user" : undefined, width: { ideal: 1280 }, height: { ideal: 720 } } }); const track = media.getVideoTracks()[0]; local.current.addTrack(track); peers.current.forEach((pc) => pc.addTrack(track, local.current!)); setCamera(true); await refreshDevices(); await renegotiate(); } catch (e) { setError((e as Error).message); }
+    const old = cameraTrack.current;
+    if (old) { old.stop(); local.current.removeTrack(old);cameraTrack.current=null;if(!sharing)peers.current.forEach((pc) => pc.getSenders().find((s) => s.track === old)?.replaceTrack(null)); setCamera(false); return; }
+    try { const media = await navigator.mediaDevices.getUserMedia({ video: { deviceId: cameraId === "default" ? undefined : { exact: cameraId }, facingMode: cameraId === "default" ? "user" : undefined, width: { ideal: 1280 }, height: { ideal: 720 } } }); const track = media.getVideoTracks()[0]; cameraTrack.current=track; local.current.addTrack(track); peers.current.forEach((pc) => pc.addTrack(track, local.current!)); setCamera(true); await refreshDevices(); await renegotiate(); } catch (e) { setError((e as Error).message); }
   }
   async function changeMicrophone(id: string) {
     setMicId(id); if (!local.current) return;
     try { const media=await navigator.mediaDevices.getUserMedia({audio:{deviceId:id==="default"?undefined:{exact:id},echoCancellation,noiseSuppression},video:false}), next=media.getAudioTracks()[0], old=local.current.getAudioTracks()[0]; local.current.removeTrack(old); old?.stop(); local.current.addTrack(next); await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track?.kind==="audio"); if(sender) await sender.replaceTrack(next);})); } catch(e){setError((e as Error).message);}
   }
-  async function changeCamera(id: string) { setCameraId(id); if (!camera || !local.current) return; const old=local.current.getVideoTracks()[0]; try { const media=await navigator.mediaDevices.getUserMedia({video:{deviceId:id==="default"?undefined:{exact:id},facingMode:id==="default"?"user":undefined,width:{ideal:1280},height:{ideal:720}},audio:false}), next=media.getVideoTracks()[0]; local.current.removeTrack(old); old?.stop(); local.current.addTrack(next); await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track?.kind==="video"); if(sender) await sender.replaceTrack(next);})); setCamera(true); } catch(e){setError((e as Error).message);}}
+  async function changeCamera(id: string) { setCameraId(id); if (!camera || !local.current) return; const old=cameraTrack.current; try { const media=await navigator.mediaDevices.getUserMedia({video:{deviceId:id==="default"?undefined:{exact:id},facingMode:id==="default"?"user":undefined,width:{ideal:1280},height:{ideal:720}},audio:false}), next=media.getVideoTracks()[0]; cameraTrack.current=next;if(old)local.current.removeTrack(old);old?.stop();local.current.addTrack(next);if(!sharing)await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(next);}));setCamera(true); } catch(e){setError((e as Error).message);}}
   async function shareScreen() {
     if (!local.current || sharing) return;
-    try { const media = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); const track = media.getVideoTracks()[0]; track.addEventListener("ended", () => setSharing(false)); local.current.addTrack(track); peers.current.forEach((pc) => pc.addTrack(track, local.current!)); setSharing(true); await renegotiate(); } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
+    try {
+      const media=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30,max:60}},audio:true}),track=media.getVideoTracks()[0];screenTrack.current=track;
+      const restore=async()=>{if(screenTrack.current!==track)return;screenTrack.current=null;local.current?.removeTrack(track);setSharing(false);const camera=cameraTrack.current;await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(sender)await sender.replaceTrack(camera&&camera.readyState==="live"?camera:null)}));track.stop();setLocalPreview();};
+      track.addEventListener("ended",()=>{void restore()},{once:true});
+      const senders=[...peers.current.values()].map((pc)=>pc.getSenders().find((s)=>s.track?.kind==="video"));
+      local.current.addTrack(track);let added=false;
+      await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{pc.addTrack(track,media);added=true;}}));
+      setSharing(true);setLocalPreview(media);if(added)await renegotiate();
+    } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
+  function setLocalPreview(stream:MediaStream|null=local.current){if(localVideo.current)localVideo.current.srcObject=stream}
   return <section className="voice-room">
-    {!joined ? <div className="voice-empty"><div className="voice-orb"><VolumeIcon /></div><h1>{name}</h1><p>No one is currently in voice</p><button className="voice-join" disabled={busy} onClick={join}>{busy ? "Joining…" : "Join Voice"}</button></div> : <>
+    {!joined ? <div className="voice-empty"><div className="voice-orb"><VolumeIcon /></div><h1>{name}</h1><p>{members.length?`${members.length} ${members.length===1?"person is":"people are"} in voice`:"No one is currently in voice"}</p>{members.length>0&&<div className="voice-waiting-members">{members.map((person)=><div key={person.id}><span>{person.name.slice(0,2).toUpperCase()}</span><strong>{person.name}</strong><i>Connected</i></div>)}</div>}<button className="voice-join" disabled={busy} onClick={join}>{busy ? "Joining…" : "Join Voice"}</button></div> : <>
       <div className="voice-grid">
         <div className="voice-tile local"><video ref={localVideo} autoPlay muted playsInline className={camera || sharing ? "" : "hidden"}/><div className="voice-avatar">{user.name.slice(0,2).toUpperCase()}</div><span>{user.name} · You</span></div>
         {remotes.map((remote) => <div className="voice-tile" key={remote.id}><RemoteVideo stream={remote.stream} speakerId={speakerId}/><div className="voice-avatar">{remote.name.slice(0,2).toUpperCase()}</div><span>{remote.name}</span></div>)}
