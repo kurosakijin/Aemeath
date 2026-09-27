@@ -120,6 +120,7 @@ export default function Hearth({
   const end = useRef<HTMLDivElement>(null),
     room = useRef(""),
     serverRef = useRef(""),
+    messageAfter = useRef(0),
     pending = useRef<{ id: string; body: string; channel: string } | null>(
       null,
     ),
@@ -203,13 +204,18 @@ export default function Hearth({
     setDraft("");
     pending.current = null;
     messageCount.current = 0;
+    messageAfter.current = 0;
     if (!current) return;
     let alive = true;
     const poll = async () => {
       try {
-        const d = await api("?channel=" + encodeURIComponent(current));
+        const after=messageAfter.current;
+        const d = await api("?channel=" + encodeURIComponent(current)+(after?"&after="+Math.max(0,after-1):""));
         if (alive) {
-          setMessages(d.messages);
+          const incoming=(d.messages||[]) as Message[];
+          if(after)setMessages(old=>{const merged=new Map(old.map(item=>[item.id,item]));incoming.forEach(item=>merged.set(item.id,item));return [...merged.values()].sort((a,b)=>Number(a.created)-Number(b.created))});
+          else setMessages(incoming);
+          if(incoming.length)messageAfter.current=Math.max(messageAfter.current,...incoming.map(item=>Number(item.created)||0));
           setError("");
         }
       } catch (e) {
@@ -217,7 +223,7 @@ export default function Hearth({
       }
     };
     poll();
-    const t = setInterval(poll, 2500);
+    const t = setInterval(poll, 4000);
     return () => {
       alive = false;
       clearInterval(t);
@@ -346,8 +352,8 @@ export default function Hearth({
         setDraft("");
         setAttachment("");setAttachmentName("");setAttachmentSpoiler(false);
         pending.current = null;
-        const d = await api("?channel=" + encodeURIComponent(target));
-        if (room.current === target) setMessages(d.messages);
+        const d = await api("?channel=" + encodeURIComponent(target)+"&after="+Math.max(0,messageAfter.current-1));
+        if (room.current === target) {const incoming=(d.messages||[]) as Message[];setMessages(old=>{const merged=new Map(old.map(item=>[item.id,item]));incoming.forEach(item=>merged.set(item.id,item));return [...merged.values()].sort((a,b)=>Number(a.created)-Number(b.created))});if(incoming.length)messageAfter.current=Math.max(messageAfter.current,...incoming.map(item=>Number(item.created)||0));}
       }
       setError("");
     } catch (e) {

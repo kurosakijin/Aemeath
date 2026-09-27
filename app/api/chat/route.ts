@@ -35,13 +35,12 @@ export async function GET(request: Request) {
         .bind(channel, user.userId)
         .first();
       if (!allowed) return bad("This channel is unavailable.", 403);
-      const rows = await db
-        .prepare(
-          "SELECT m.*,p.name FROM messages m LEFT JOIN profiles p ON p.id=m.user WHERE m.channel=? ORDER BY m.created DESC,m.id DESC LIMIT 200",
-        )
-        .bind(channel)
-        .all();
-      return json({ messages: rows.results.reverse() });
+      const after = Number(url.searchParams.get("after") || 0);
+      const incremental = Number.isFinite(after) && after > 0;
+      const rows = incremental
+        ? await db.prepare("SELECT m.*,p.name FROM messages m LEFT JOIN profiles p ON p.id=m.user WHERE m.channel=? AND m.created>? ORDER BY m.created,m.id LIMIT 50").bind(channel,after).all()
+        : await db.prepare("SELECT m.*,p.name FROM messages m LEFT JOIN profiles p ON p.id=m.user WHERE m.channel=? ORDER BY m.created DESC,m.id DESC LIMIT 50").bind(channel).all();
+      return json({ messages: incremental ? rows.results : rows.results.reverse() });
     }
     if (server) {
       const allowed = await membership(server, user.userId);
