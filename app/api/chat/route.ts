@@ -45,7 +45,8 @@ export async function GET(request: Request) {
     if (server) {
       const allowed = await membership(server, user.userId);
       if (!allowed) return bad("This server is unavailable.", 403);
-      const [cs, ms] = await Promise.all([
+      const now=Date.now();
+      const [cs, ms, vp] = await Promise.all([
         db
           .prepare("SELECT * FROM channels WHERE server=? ORDER BY created,id")
           .bind(server)
@@ -56,11 +57,13 @@ export async function GET(request: Request) {
           )
           .bind(server)
           .all(),
+        db.prepare('SELECT v.channel,v."user" AS id,a.username AS name,v."left" AS left_at FROM voice_presence v JOIN channels c ON c.id=v.channel JOIN accounts a ON a.id=v."user" WHERE c.server=? AND v.updated>? AND (v."left"=0 OR v."left">?) ORDER BY v.joined').bind(server,now-30000,now-10000).all(),
       ]);
       return json({
         server: allowed,
         channels: cs.results,
         members: ms.results,
+        voiceMembers: vp.results,
       });
     }
     const list = await db

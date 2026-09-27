@@ -7,6 +7,7 @@ type Signal = { id: string; from: string; body: string; created: number };
 type Remote = Person & { stream: MediaStream };
 type DeviceOption = { deviceId: string; label: string };
 type StreamQuality = "1080" | "1440";
+function mediaPermissionDenied(error:unknown){const value=error as {name?:string;message?:string};return ["NotAllowedError","PermissionDeniedError","SecurityError"].includes(value?.name||"")||/permission|denied|not allowed|blocked/i.test(value?.message||String(error))}
 
 async function tuneVideoSender(sender: RTCRtpSender | undefined, fps: number, quality: StreamQuality) {
   if (!sender) return;
@@ -88,7 +89,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), names = useRef(new Map<string, string>()),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
-    screenTrack = useRef<MediaStreamTrack | null>(null), cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null);
+    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null);
 
   const signal = useCallback((to: string, body: unknown) => post(channel, { action: "signal", to, body: JSON.stringify(body) }), [channel]);
   const refreshDevices = useCallback(async () => {
@@ -110,8 +111,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     if(activeVideo){const sender=pc.addTrack(activeVideo,new MediaStream([activeVideo]));if(screenTrack.current)void tuneVideoSender(sender,streamFps,streamQuality)}
     pc.onicecandidate = (event) => { if (event.candidate) void signal(person.id, { type: "candidate", candidate: event.candidate }); };
     pc.ontrack = (event) => {
-      const stream = event.streams[0] || new MediaStream([event.track]);
-      setRemotes((old) => [...old.filter((r) => r.id !== person.id), { ...person, stream }]);
+      setRemotes((old) => {const existing=old.find(r=>r.id===person.id),stream=existing?.stream||new MediaStream(),incoming=event.streams[0]?.getTracks()||[event.track];incoming.forEach(track=>{if(!stream.getTracks().some(current=>current.id===track.id))stream.addTrack(track)});if(!stream.getTracks().some(current=>current.id===event.track.id))stream.addTrack(event.track);event.track.addEventListener("ended",()=>{try{stream.removeTrack(event.track)}catch{}},{once:true});return [...old.filter((r) => r.id !== person.id), { ...person, stream }];});
     };
     pc.onconnectionstatechange = () => { if (["failed", "closed"].includes(pc.connectionState)) closePeer(person.id); };
     return pc;
@@ -140,7 +140,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const leave = useCallback(async () => {
     if (!joined && !local.current) return;
     roomTone("leave");
-    setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;
+    setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
     peers.current.forEach((pc) => pc.close()); peers.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
     try { await post(channel, { action: "leave" }); } catch {}
   }, [channel, joined]);
@@ -181,8 +181,8 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       const config = await fetch("/api/calls?config=1").then((r) => r.json()) as Record<string, any>; ice.current = config.iceServers || [];
       let listenOnly=false;
       if(!navigator.mediaDevices?.getUserMedia){local.current=new MediaStream();listenOnly=true}
-      else try { local.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation, noiseSuppression, deviceId: micId === "default" ? undefined : { exact: micId } }, video: false });await refreshDevices(); }
-      catch(e){if(e instanceof DOMException&&["NotAllowedError","NotFoundError","SecurityError"].includes(e.name)){local.current=new MediaStream();listenOnly=true}else throw e}
+      else try { local.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation, noiseSuppression, deviceId: micId === "default" ? undefined : { exact: micId } }, video: false });microphoneTrack.current=local.current.getAudioTracks()[0]||null;await refreshDevices(); }
+      catch(e){if(mediaPermissionDenied(e)||(e instanceof DOMException&&e.name==="NotFoundError")){local.current=new MediaStream();listenOnly=true}else throw e}
       after.current = Date.now(); await post(channel, { action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true);joinedRef.current=true; roomTone("join");
       setMuted(listenOnly);if(listenOnly)setError("Joined in listen-only mode. Use the microphone button when you are ready to allow access.");
     } catch (e) { setError(e instanceof Error ? e.message : "Microphone access is required to join."); local.current?.getTracks().forEach((t) => t.stop()); local.current = null; }
@@ -190,9 +190,9 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   }
   async function toggleMute(){
     if(!local.current)return;
-    const tracks=local.current.getAudioTracks();
-    if(!tracks.length){try{const media=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation,noiseSuppression,deviceId:micId==="default"?undefined:{exact:micId}},video:false}),track=media.getAudioTracks()[0];local.current.addTrack(track);peers.current.forEach(pc=>pc.addTrack(track,local.current!));setMuted(false);setError("");await refreshDevices();await renegotiate()}catch(e){setMuted(true);setError(e instanceof DOMException&&e.name==="NotAllowedError"?"Microphone access is blocked. Allow it in your browser's site permissions, then press the microphone button again.":(e as Error).message)}return;}
-    const next=!muted;tracks.forEach(track=>track.enabled=!next);setMuted(next);
+    const track=microphoneTrack.current;
+    if(!track||track.readyState==="ended"){try{const media=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation,noiseSuppression,deviceId:micId==="default"?undefined:{exact:micId}},video:false}),nextTrack=media.getAudioTracks()[0];microphoneTrack.current=nextTrack;local.current.addTrack(nextTrack);peers.current.forEach(pc=>pc.addTrack(nextTrack,local.current!));setMuted(false);setError("");await refreshDevices();await renegotiate()}catch(e){setMuted(true);setError(mediaPermissionDenied(e)?"Microphone access is blocked by this browser. You are still connected in listen-only mode.":(e as Error).message)}return;}
+    const next=!muted;track.enabled=!next;setMuted(next);
   }
   async function renegotiate() { for (const p of members) if (p.id !== user.id) await offer(p); }
   async function toggleCamera() {
@@ -203,7 +203,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   }
   async function changeMicrophone(id: string) {
     setMicId(id); if (!local.current) return;
-    try { const media=await navigator.mediaDevices.getUserMedia({audio:{deviceId:id==="default"?undefined:{exact:id},echoCancellation,noiseSuppression},video:false}), next=media.getAudioTracks()[0], old=local.current.getAudioTracks()[0]; local.current.removeTrack(old); old?.stop(); local.current.addTrack(next); await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track?.kind==="audio"); if(sender) await sender.replaceTrack(next);})); } catch(e){setError((e as Error).message);}
+    try { const media=await navigator.mediaDevices.getUserMedia({audio:{deviceId:id==="default"?undefined:{exact:id},echoCancellation,noiseSuppression},video:false}), next=media.getAudioTracks()[0], old=microphoneTrack.current; if(old)local.current.removeTrack(old); old?.stop();microphoneTrack.current=next; local.current.addTrack(next); await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track===old); if(sender) await sender.replaceTrack(next);else pc.addTrack(next,local.current!);})); } catch(e){setError(mediaPermissionDenied(e)?"Microphone access is blocked by this browser.":(e as Error).message);}
   }
   async function changeCamera(id: string) { setCameraId(id); if (!camera || !local.current) return; const old=cameraTrack.current; try { const media=await navigator.mediaDevices.getUserMedia({video:{deviceId:id==="default"?undefined:{exact:id},facingMode:id==="default"?"user":undefined,width:{ideal:1280},height:{ideal:720}},audio:false}), next=media.getVideoTracks()[0]; cameraTrack.current=next;if(old)local.current.removeTrack(old);old?.stop();local.current.addTrack(next);if(!sharing)await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(next);}));setCamera(true); } catch(e){setError((e as Error).message);}}
   async function shareScreen() {
@@ -214,15 +214,15 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       if(!capture){setStreamMenu(false);if(!camera)await toggleCamera();throw new Error("Screen sharing is unavailable in this mobile browser, so Aemeath opened your camera instead.");}
       const size=mobileDevice?{width:Math.max(screen.width,720),height:Math.max(screen.height,1280)}:streamQuality==="1440"?{width:2560,height:1440}:{width:1920,height:1080},fps=mobileDevice?Math.min(streamFps,60):streamFps;
       const displayOptions=mobileDevice?{video:true,audio:false}:{video:{width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:fps,max:fps}},audio:true,surfaceSwitching:"include",systemAudio:"include"} as DisplayMediaStreamOptions;
-      const media=await capture(displayOptions),sourceTrack=media.getVideoTracks()[0],captured=sourceTrack.getSettings();
+      const media=await capture(displayOptions),sourceTrack=media.getVideoTracks()[0],displayAudio=media.getAudioTracks()[0]||null,captured=sourceTrack.getSettings();
       if(!mobileDevice)await sourceTrack.applyConstraints({width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:fps,max:fps}}).catch(()=>{});
-      const stabilized=await stableCapture(media,fps,captured.width||size.width,captured.height||size.height),track=stabilized.track;captureCleanup.current=()=>{stabilized.stop();media.getTracks().forEach((t)=>t.stop())};screenTrack.current=track;
-      const restore=async()=>{if(screenTrack.current!==track)return;roomTone("stream-stop");screenTrack.current=null;stopSharingRef.current=null;captureCleanup.current?.();captureCleanup.current=null;local.current?.removeTrack(track);setSharing(false);setStreamMenu(false);setTheaterStream("");const camera=cameraTrack.current;await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:!!camera&&camera.readyState==="live"})));await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(sender)await sender.replaceTrack(camera&&camera.readyState==="live"?camera:null)}));track.stop();setLocalPreview();};
+      const stabilized=await stableCapture(media,fps,captured.width||size.width,captured.height||size.height),track=stabilized.track;captureCleanup.current=()=>{stabilized.stop();media.getTracks().forEach((t)=>t.stop())};screenTrack.current=track;screenAudioTrack.current=displayAudio;
+      const restore=async()=>{if(screenTrack.current!==track)return;roomTone("stream-stop");screenTrack.current=null;screenAudioTrack.current=null;stopSharingRef.current=null;captureCleanup.current?.();captureCleanup.current=null;local.current?.removeTrack(track);if(displayAudio)local.current?.removeTrack(displayAudio);setSharing(false);setStreamMenu(false);setTheaterStream("");const camera=cameraTrack.current;await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:!!camera&&camera.readyState==="live"})));await Promise.all([...peers.current.values()].map(async(pc)=>{const videoSender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(videoSender)await videoSender.replaceTrack(camera&&camera.readyState==="live"?camera:null);const audioSender=displayAudio?pc.getSenders().find(s=>s.track===displayAudio):null;if(audioSender)await audioSender.replaceTrack(null)}));track.stop();displayAudio?.stop();setLocalPreview();};
       stopSharingRef.current=restore;
       sourceTrack.addEventListener("ended",()=>{void restore()},{once:true});
       const senders=[...peers.current.values()].map((pc)=>pc.getSenders().find((s)=>s.track?.kind==="video"));
-      local.current.addTrack(track);let added=false;
-      const stableStream=new MediaStream([track]);await Promise.all([...peers.current.values()].map(async(pc)=>{let sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{sender=pc.addTrack(track,stableStream);added=true;}await tuneVideoSender(sender,fps,streamQuality)}));
+      local.current.addTrack(track);if(displayAudio)local.current.addTrack(displayAudio);let added=false;
+      const stableStream=new MediaStream(displayAudio?[track,displayAudio]:[track]);await Promise.all([...peers.current.values()].map(async(pc)=>{let sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{sender=pc.addTrack(track,stableStream);added=true;}if(displayAudio&&!pc.getSenders().some(s=>s.track===displayAudio)){pc.addTrack(displayAudio,stableStream);added=true}await tuneVideoSender(sender,fps,streamQuality)}));
       setSharing(true);roomTone("stream-start");setLocalPreview(media);await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true})));if(added)await renegotiate();
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }

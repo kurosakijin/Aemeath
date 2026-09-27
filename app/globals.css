@@ -256,6 +256,7 @@ svg {
   margin-left: auto;
   opacity: 0.55;
 }
+.voice-channel-block{display:flex;flex-direction:column}.voice-channel-block>.channel{width:100%}.voice-channel-member{display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:7px;margin:2px 7px 2px 25px;padding:4px 7px;border-radius:6px;color:#b8b3ba;font-size:12px}.voice-channel-member:hover{background:#2a292f;color:#fff}.voice-channel-member>span{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#7d365e;color:#ffd5e8;font-size:8px;font-weight:850}.voice-channel-member strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}.voice-channel-member small{color:#d88eb3;font-size:9px}
 .channel:hover .channel-edit {
   opacity: 1;
 }

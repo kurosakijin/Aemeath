@@ -57,6 +57,7 @@ type Channel = {
   topic?: string;
 };
 type Member = { id: string; name: string };
+type VoiceMember = Member & { channel:string; left_at?:number|string };
 type InvitePreview = { code:string; expires:number; id:string; name:string; icon?:string; banner?:string; inviter:string; members:number };
 type Message = {
   id: string;
@@ -93,6 +94,7 @@ export default function Hearth({
     [channels, setChannels] = useState<Channel[]>([]),
     [current, setCurrent] = useState(""),
     [members, setMembers] = useState<Member[]>([]),
+    [voiceMembers,setVoiceMembers]=useState<VoiceMember[]>([]),
     [messages, setMessages] = useState<Message[]>([]);
   const [name, setName] = useState(user?.name || "Your profile"),
     [modal, setModal] = useState(startCreate ? "picker" : ""),
@@ -168,6 +170,7 @@ export default function Hearth({
     serverRef.current = selected;
     setChannels([]);
     setMembers([]);
+    setVoiceMembers([]);
     setCurrent("");
     setMessages([]);
     if (!selected) return;
@@ -179,6 +182,7 @@ export default function Hearth({
         if (alive) {
           setChannels(d.channels);
           setMembers(d.members);
+          setVoiceMembers(d.voiceMembers||[]);
           setCurrent((old) =>
             d.channels.some((c: Channel) => c.id === old)
               ? old
@@ -193,7 +197,7 @@ export default function Hearth({
       }
     };
     load();
-    const t = setInterval(load, 10000);
+    const t = setInterval(load, 3000);
     return () => {
       alive = false;
       clearInterval(t);
@@ -514,9 +518,8 @@ export default function Hearth({
             {channels
               .filter((c) => c.kind === "voice")
               .map((c) => (
-                <button
+                <div className="voice-channel-block" key={c.id}><button
                   className={"channel " + (c.id === current ? "active" : "")}
-                  key={c.id}
                   onClick={() => {
                     setCurrent(c.id);
                     setMobile(false);
@@ -534,7 +537,7 @@ export default function Hearth({
                       }}
                     />
                   )}
-                </button>
+                </button>{voiceMembers.filter(person=>person.channel===c.id).map(person=><div className="voice-channel-member" key={person.id}><span>{initials(person.name||"Member")}</span><strong>{person.name||"Member"}</strong>{Number(person.left_at)>0&&<small>Reconnecting</small>}</div>)}</div>
               ))}
             <div className="sidebar-bottom">
               <Lock size={14} /> Private by invitation
