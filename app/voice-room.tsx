@@ -7,6 +7,31 @@ type Signal = { id: string; from: string; body: string; created: number };
 type Remote = Person & { stream: MediaStream };
 type DeviceOption = { deviceId: string; label: string };
 
+let roomAudio: AudioContext | null = null;
+function roomTone(kind: "join" | "leave") {
+  try {
+    roomAudio ??= new AudioContext();
+    void roomAudio.resume();
+    const now = roomAudio.currentTime + .015,
+      master = roomAudio.createGain(),
+      notes = kind === "join" ? [392, 523.25, 659.25] : [523.25, 392];
+    master.gain.setValueAtTime(.0001, now);
+    master.gain.exponentialRampToValueAtTime(.12, now + .025);
+    master.gain.exponentialRampToValueAtTime(.0001, now + .52);
+    master.connect(roomAudio.destination);
+    notes.forEach((frequency, index) => {
+      const oscillator = roomAudio!.createOscillator(), shimmer = roomAudio!.createGain(), start = now + index * .075;
+      oscillator.type = index === 0 ? "sine" : "triangle";
+      oscillator.frequency.setValueAtTime(frequency, start);
+      oscillator.frequency.exponentialRampToValueAtTime(frequency * (kind === "join" ? 1.018 : .985), start + .24);
+      shimmer.gain.setValueAtTime(.0001, start);
+      shimmer.gain.exponentialRampToValueAtTime(index === 0 ? .7 : .42, start + .018);
+      shimmer.gain.exponentialRampToValueAtTime(.0001, start + .34);
+      oscillator.connect(shimmer).connect(master); oscillator.start(start); oscillator.stop(start + .36);
+    });
+  } catch { /* Sound is optional when a browser blocks audio. */ }
+}
+
 async function post(channel: string, data: Record<string, unknown>) {
   const response = await fetch("/api/voice", {
     method: "POST",
@@ -30,7 +55,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     [sensitivity, setSensitivity] = useState(55);
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), names = useRef(new Map<string, string>()),
-    after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]);
+    after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null);
 
   const signal = useCallback((to: string, body: unknown) => post(channel, { action: "signal", to, body: JSON.stringify(body) }), [channel]);
   const refreshDevices = useCallback(async () => {
@@ -75,8 +100,9 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
 
   const leave = useCallback(async () => {
     if (!joined && !local.current) return;
+    roomTone("leave");
     setJoined(false); local.current?.getTracks().forEach((track) => track.stop()); local.current = null;
-    peers.current.forEach((pc) => pc.close()); peers.current.clear(); setRemotes([]); setCamera(false); setSharing(false);
+    peers.current.forEach((pc) => pc.close()); peers.current.clear(); knownMembers.current = null; setRemotes([]); setCamera(false); setSharing(false);
     try { await post(channel, { action: "leave" }); } catch {}
   }, [channel, joined]);
   useEffect(() => () => { alive.current = false; local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); void post(channel, { action: "leave" }); }, [channel]);
@@ -87,7 +113,12 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       try {
         const response = await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${after.current}`, { cache: "no-store" });
         const data = await response.json() as Record<string, any>; if (!response.ok) throw new Error(data.error);
-        after.current = data.now || Date.now(); const list = (data.members || []) as Person[]; setMembers(list); list.forEach((p) => names.current.set(p.id, p.name));
+        after.current = data.now || Date.now(); const list = (data.members || []) as Person[], nextMembers = new Set(list.map((p) => p.id));
+        if (knownMembers.current) {
+          if (list.some((p) => p.id !== user.id && !knownMembers.current!.has(p.id))) roomTone("join");
+          if ([...knownMembers.current].some((id) => id !== user.id && !nextMembers.has(id))) roomTone("leave");
+        }
+        knownMembers.current = nextMembers; setMembers(list); list.forEach((p) => names.current.set(p.id, p.name));
         for (const item of (data.signals || []) as Signal[]) await handleSignal(item);
         for (const p of list) if (p.id !== user.id && !peers.current.has(p.id) && user.id < p.id) await offer(p);
         for (const id of [...peers.current.keys()]) if (!list.some((p) => p.id === id)) closePeer(id);
@@ -103,7 +134,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       const config = await fetch("/api/calls?config=1").then((r) => r.json()) as Record<string, any>; ice.current = config.iceServers || [];
       local.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation, noiseSuppression, deviceId: micId === "default" ? undefined : { exact: micId } }, video: false });
       await refreshDevices();
-      after.current = Date.now(); await post(channel, { action: "join" }); setMembers([user]); setJoined(true);
+      after.current = Date.now(); await post(channel, { action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true); roomTone("join");
     } catch (e) { setError(e instanceof Error ? e.message : "Microphone access is required to join."); local.current?.getTracks().forEach((t) => t.stop()); local.current = null; }
     finally { setBusy(false); }
   }
