@@ -1303,9 +1303,16 @@ html.desktop-app .signed-in-downloads{display:none}
 }
 .signed-in-downloads {
   position: fixed;
-  right: 74px;
-  top: 15px;
-  z-index: 31;
+  left:82px;
+  bottom:68px;
+  width:280px;
+  z-index:29;
+  padding:7px;
+  border:1px solid #ffffff0b;
+  border-radius:11px;
+  background:#1a1b20e8;
+  box-shadow:0 -8px 24px #0004;
+  backdrop-filter:blur(10px);
 }
 .app-downloads.compact {
   display: flex;
@@ -1314,10 +1321,14 @@ html.desktop-app .signed-in-downloads{display:none}
 }
 .app-downloads.compact .app-download-title { display: none; }
 .app-downloads.compact a {
-  min-height: 36px;
-  padding: 0 11px;
-  background: #25262b;
-  box-shadow: 0 5px 18px #0004;
+  min-width:0;
+  min-height:34px;
+  flex:1;
+  padding:0 9px;
+  border-color:#3a3b43;
+  background:#25262b;
+  box-shadow:none;
+  font-size:12px;
 }
 .auth-storage svg {
   margin-top: 3px;
