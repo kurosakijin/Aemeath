@@ -516,7 +516,7 @@ function Inbox({
                             },
                           )}
                         </time>
-                        {isImageMessage(m.body)?<img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy"/>:<p>{m.body}</p>}
+                        {isImageMessage(m.body)?<img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>void e.currentTarget.requestFullscreen?.()}/>:<p>{m.body}</p>}
                       </div>
                     </article>
                   </div>
@@ -570,7 +570,7 @@ function Inbox({
           {conversation && (
             <div className="composer-wrap">
               <form className="composer" onSubmit={send}>
-                <label className="attach-image" title="Attach image"><ImagePlus size={20}/><input type="file" accept="image/*" disabled={sending} onChange={async(e)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setSending(true);try{const image=await compressChatImage(file);setSending(false);await send(undefined,image)}catch(error){setError((error as Error).message);setSending(false)}}}/></label>
+                <label className="attach-image" title="Attach an image" aria-label="Attach an image"><ImagePlus size={19}/><input className="chat-image-input" type="file" accept="image/*" disabled={sending} onChange={async(e)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setSending(true);try{const image=await compressChatImage(file);setSending(false);await send(undefined,image)}catch(error){setError((error as Error).message);setSending(false)}}}/></label>
                 <textarea
                   rows={1}
                   aria-label={"Message " + conversation.name}

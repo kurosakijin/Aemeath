@@ -505,7 +505,7 @@ svg {
   flex: 1;
   font-size: 14px;
 }
-.attach-image{width:32px;height:32px;flex:0 0 auto;display:grid;place-items:center;border-radius:8px;color:#b9aab3;cursor:pointer}.attach-image:hover{background:#ffffff0d;color:#ff8fc4}.attach-image input{display:none}.chat-image{display:block;max-width:min(520px,100%);max-height:520px;margin-top:8px;border-radius:12px;object-fit:contain;background:#151217;cursor:zoom-in}.voice-chat-message .chat-image{max-width:270px;max-height:300px}
+.attach-image{position:relative;width:34px;height:34px;flex:0 0 auto;display:grid;place-items:center;border-radius:10px;background:#3a3038;color:#ff9bc9;cursor:pointer;transition:.16s}.attach-image:hover{background:#ff5ca8;color:#281720;transform:translateY(-1px)}.attach-image:active{transform:none}.attach-image .chat-image-input,.composer .chat-image-input,input.chat-image-input{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;clip:rect(0 0 0 0)!important;padding:0!important;margin:-1px!important;border:0!important}.chat-image{display:block;max-width:min(520px,100%);max-height:520px;margin-top:9px;border:1px solid #ffffff14;border-radius:13px;object-fit:contain;background:#151217;cursor:zoom-in;box-shadow:0 8px 26px #0004}.chat-image:fullscreen{width:100vw;height:100vh;max-width:none;max-height:none;object-fit:contain;border:0;border-radius:0;background:#070608}.voice-chat-message>div:last-child{min-width:0;flex:1}.voice-chat-message .chat-image{max-width:100%;max-height:300px}.voice-chat-drawer .composer{gap:9px;padding:10px 11px;min-height:52px}.voice-chat-drawer .composer>svg:first-child{display:none}
 .composer textarea {
   background: none;
   border: 0;
