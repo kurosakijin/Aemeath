@@ -29,9 +29,11 @@ import {
   PanelRightClose,
   Bell,
   Shield,
+  ImagePlus,
 } from "lucide-react";
 import VoiceRoom from "./voice-room";
 import ServerSettings from "./server-settings";
+import {compressChatImage,imageSource,isImageMessage} from "@/lib/image-message";
 import {
   SidebarProvider,
   Sidebar,
@@ -320,11 +322,11 @@ export default function Hearth({
       setBusy(false);
     }
   }
-  async function send(e?: React.FormEvent) {
+  async function send(e?: React.FormEvent,attachment?:string) {
     e?.preventDefault();
-    if (!draft.trim() || sending || !current) return;
+    if ((!draft.trim()&&!attachment) || sending || !current) return;
     const target = current,
-      body = draft.trim();
+      body = attachment||draft.trim();
     if (
       !pending.current ||
       pending.current.body !== body ||
@@ -700,7 +702,7 @@ export default function Hearth({
                             minute: "2-digit",
                           })}
                         </time>
-                        <p>{m.body}</p>
+                        {isImageMessage(m.body)?<img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy"/>:<p>{m.body}</p>}
                       </div>
                     </article>
                   </div>
@@ -723,13 +725,14 @@ export default function Hearth({
           {(!isVoice || voiceChat) && <div className={isVoice ? "composer-wrap voice-chat-drawer" : "composer-wrap"}>
             {isVoice && <div className="voice-chat-list">
               <div className="voice-chat-title"><MessageCircle size={17}/><strong>Channel chat</strong><button aria-label="Close channel chat" onClick={()=>setVoiceChat(false)}><X size={17}/></button></div>
-              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{new Date(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time><p>{m.body}</p></div></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
+              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{new Date(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy"/>:<p>{m.body}</p>}</div></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
             </div>}
             <form
               className={"composer " + (!current ? "disabled" : "")}
               onSubmit={send}
             >
               <Hash size={19} />
+              <label className="attach-image" title="Attach image"><ImagePlus size={20}/><input type="file" accept="image/*" disabled={!current||sending} onChange={async(e)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setSending(true);try{const image=await compressChatImage(file);setSending(false);await send(undefined,image)}catch(error){setError((error as Error).message);setSending(false)}}}/></label>
               <textarea
                 rows={1}
                 aria-label={"Message #" + (channel?.name || "general")}

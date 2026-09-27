@@ -52,7 +52,7 @@ export async function GET(r: Request) {
     }
     const list = await db
       .prepare(
-        "SELECT c.id,c.updated,a.id AS peer,a.username AS name,(SELECT body FROM direct_messages WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS preview,(SELECT status FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_status,(SELECT reason FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_reason,(SELECT kind FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_kind,(SELECT caller FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_caller,(SELECT created FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_created FROM conversations c JOIN accounts a ON a.id=CASE WHEN c.first=? THEN c.second ELSE c.first END WHERE c.first=? OR c.second=? ORDER BY c.updated DESC",
+        "SELECT c.id,c.updated,a.id AS peer,a.username AS name,(SELECT CASE WHEN body LIKE 'aemeath:image:%' THEN 'Sent an image' ELSE body END FROM direct_messages WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS preview,(SELECT status FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_status,(SELECT reason FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_reason,(SELECT kind FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_kind,(SELECT caller FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_caller,(SELECT created FROM calls WHERE conversation=c.id ORDER BY created DESC LIMIT 1) AS call_created FROM conversations c JOIN accounts a ON a.id=CASE WHEN c.first=? THEN c.second ELSE c.first END WHERE c.first=? OR c.second=? ORDER BY c.updated DESC",
       )
       .bind(u.id, u.id, u.id)
       .all();
@@ -64,7 +64,7 @@ export async function GET(r: Request) {
 export async function POST(r: Request) {
   try {
     const u = await requireAccount();
-    const d = await input(r);
+    const d = await input(r,420000);
     const db = database();
     if (d.action === "start") {
       await throttle("dm-start:" + u.id, 30, 60000);
@@ -96,8 +96,9 @@ export async function POST(r: Request) {
       await participant(id, u.id);
       const body = str(d.body).trim(),
         messageId = str(d.id);
-      if (!body || body.length > 4000 || !/^[a-f0-9-]{36}$/.test(messageId))
-        throw new AppError("Use 1–4,000 characters.");
+      const image=body.startsWith("aemeath:image:data:image/");
+      if (!body || (!image&&body.length>4000) || (image&&body.length>400000) || !/^[a-f0-9-]{36}$/.test(messageId))
+        throw new AppError("Send up to 4,000 characters or one compressed image.");
       const now = Date.now();
       await db.batch([
         db

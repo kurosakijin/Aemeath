@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Lock,
   AtSign,
+  ImagePlus,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { request, onlineChat, type LocalUser } from "@/lib/online";
 import Hearth from "./hearth";
+import {compressChatImage,imageSource,isImageMessage} from "@/lib/image-message";
 import { CallProvider, useCalls } from "./call-provider";
 type Conversation = {
   id: string;
@@ -211,11 +213,11 @@ function Inbox({
       setStarting(false);
     }
   }
-  async function send(e?: React.FormEvent) {
+  async function send(e?: React.FormEvent,attachment?:string) {
     e?.preventDefault();
-    if (!selected || !draft.trim() || sending) return;
+    if (!selected || (!draft.trim()&&!attachment) || sending) return;
     const id = selected;
-    const body = draft.trim();
+    const body = attachment||draft.trim();
     if (
       !pending.current ||
       pending.current.body !== body ||
@@ -514,7 +516,7 @@ function Inbox({
                             },
                           )}
                         </time>
-                        <p>{m.body}</p>
+                        {isImageMessage(m.body)?<img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy"/>:<p>{m.body}</p>}
                       </div>
                     </article>
                   </div>
@@ -568,6 +570,7 @@ function Inbox({
           {conversation && (
             <div className="composer-wrap">
               <form className="composer" onSubmit={send}>
+                <label className="attach-image" title="Attach image"><ImagePlus size={20}/><input type="file" accept="image/*" disabled={sending} onChange={async(e)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setSending(true);try{const image=await compressChatImage(file);setSending(false);await send(undefined,image)}catch(error){setError((error as Error).message);setSending(false)}}}/></label>
                 <textarea
                   rows={1}
                   aria-label={"Message " + conversation.name}

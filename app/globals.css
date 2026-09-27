@@ -505,6 +505,7 @@ svg {
   flex: 1;
   font-size: 14px;
 }
+.attach-image{width:32px;height:32px;flex:0 0 auto;display:grid;place-items:center;border-radius:8px;color:#b9aab3;cursor:pointer}.attach-image:hover{background:#ffffff0d;color:#ff8fc4}.attach-image input{display:none}.chat-image{display:block;max-width:min(520px,100%);max-height:520px;margin-top:8px;border-radius:12px;object-fit:contain;background:#151217;cursor:zoom-in}.voice-chat-message .chat-image{max-width:270px;max-height:300px}
 .composer textarea {
   background: none;
   border: 0;
