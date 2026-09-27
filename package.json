@@ -11,7 +11,10 @@
     "build": "node scripts/run-framework.mjs build",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "desktop:dev": "electron .",
+    "desktop:pack": "electron-builder --dir",
+    "desktop:build": "electron-builder --win nsis"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -50,8 +53,11 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.4",
+    "png-to-ico": "^3.0.2",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "tw-animate-css": "^1.4.0",
@@ -66,5 +72,34 @@
       "sharp": "0.35.4"
     }
   },
-  "description": "A private community chat app with servers, direct messages, voice rooms, screen sharing, and image attachments."
+  "description": "A private community chat app with servers, direct messages, voice rooms, screen sharing, and image attachments.",
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "app.aemeath.desktop",
+    "productName": "Aemeath",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "app": "desktop"
+    },
+    "files": [
+      "**/*"
+    ],
+    "win": {
+      "icon": "desktop/assets/icon.ico",
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "Aemeath-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "createDesktopShortcut": true,
+      "shortcutName": "Aemeath",
+      "createStartMenuShortcut": true,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "npmRebuild": false,
+    "nodeGypRebuild": false
+  }
 }

@@ -80,3 +80,15 @@ npm run lint      # Run lint checks
 ## Privacy
 
 Servers are private by invitation. Channel and voice access is checked against server membership on the backend. Uploaded chat attachments currently support compressed images only; video uploads are intentionally disabled.
+
+## Desktop app
+
+Aemeath also includes an Electron desktop client for Windows. It opens the production service in a dedicated Chromium window and supports microphone, camera, screen capture, and Windows loopback audio.
+
+```bash
+npm run desktop:dev    # Run the desktop client
+npm run desktop:pack   # Create an unpacked application for testing
+npm run desktop:build  # Create the Windows installer
+```
+
+The installer is written to `release/`. Set `AEMEATH_APP_URL` before launching if the desktop client should use a different Aemeath deployment.

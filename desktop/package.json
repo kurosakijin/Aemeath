@@ -1,0 +1,11 @@
+{
+  "name": "aemeath-desktop",
+  "version": "0.1.0",
+  "description": "Aemeath desktop client",
+  "author": "Aemeath",
+  "private": true,
+  "main": "main.cjs",
+  "dependencies": {
+    "electron-log": "^5.4.4"
+  }
+}
