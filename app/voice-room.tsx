@@ -36,6 +36,8 @@ async function stableCapture(media:MediaStream,fps:number,width:number,height:nu
   return {track,stop:()=>{stopped=true;if(frameHandle&&"cancelVideoFrameCallback" in video)(video as HTMLVideoElement&{cancelVideoFrameCallback:(id:number)=>void}).cancelVideoFrameCallback(frameHandle);if(timer)clearInterval(timer);video.pause();video.srcObject=null;stream.getTracks().forEach((t)=>t.stop())}};
 }
 
+function mixShareAudio(microphone:MediaStreamTrack|null,system:MediaStreamTrack){const context=new AudioContext(),destination=context.createMediaStreamDestination(),sources:MediaStreamAudioSourceNode[]=[];for(const track of [microphone,system])if(track&&track.readyState==="live"){const source=context.createMediaStreamSource(new MediaStream([track]));source.connect(destination);sources.push(source)}void context.resume();const output=destination.stream.getAudioTracks()[0];output.contentHint="music";return{track:output,stop:()=>{sources.forEach(source=>source.disconnect());output.stop();void context.close()}}}
+
 let roomAudio: AudioContext | null = null;
 function roomTone(kind: "join" | "leave" | "stream-start" | "stream-stop" | "watch-start" | "watch-stop") {
   try {
@@ -89,7 +91,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), names = useRef(new Map<string, string>()),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
-    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null);
+    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null);
 
   const signal = useCallback((to: string, body: unknown) => post(channel, { action: "signal", to, body: JSON.stringify(body) }), [channel]);
   const refreshDevices = useCallback(async () => {
@@ -106,7 +108,8 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     const existing = peers.current.get(person.id); if (existing) return existing;
     names.current.set(person.id, person.name);
     const pc = new RTCPeerConnection({ iceServers: ice.current }); peers.current.set(person.id, pc);
-    local.current?.getAudioTracks().forEach((track) => pc.addTrack(track, local.current!));
+    const activeAudio=screenAudioTrack.current||microphoneTrack.current;
+    if(activeAudio)pc.addTrack(activeAudio,new MediaStream([activeAudio]));
     const activeVideo=screenTrack.current||cameraTrack.current;
     if(activeVideo){const sender=pc.addTrack(activeVideo,new MediaStream([activeVideo]));if(screenTrack.current)void tuneVideoSender(sender,streamFps,streamQuality)}
     pc.onicecandidate = (event) => { if (event.candidate) void signal(person.id, { type: "candidate", candidate: event.candidate }); };
@@ -140,11 +143,11 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const leave = useCallback(async () => {
     if (!joined && !local.current) return;
     roomTone("leave");
-    setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
+    setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
     peers.current.forEach((pc) => pc.close()); peers.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
     try { await post(channel, { action: "leave" }); } catch {}
   }, [channel, joined]);
-  useEffect(() => () => { alive.current = false;captureCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); if(joinedRef.current)void post(channel, { action: "leave" }); }, [channel]);
+  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); if(joinedRef.current)void post(channel, { action: "leave" }); }, [channel]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[]);
   useEffect(()=>{setMobileDevice(matchMedia("(pointer: coarse)").matches||navigator.maxTouchPoints>1);const legacy=navigator as Navigator&{getDisplayMedia?:typeof navigator.mediaDevices.getDisplayMedia};setScreenShareSupported(typeof navigator.mediaDevices?.getDisplayMedia==="function"||typeof legacy.getDisplayMedia==="function")},[]);
   useEffect(() => { if (localVideo.current) localVideo.current.srcObject = sharing&&screenTrack.current?new MediaStream([screenTrack.current]):local.current; }, [camera, sharing, joined]);
@@ -216,13 +219,15 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       const displayOptions=mobileDevice?{video:true,audio:false}:{video:{width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:fps,max:fps}},audio:true,surfaceSwitching:"include",systemAudio:"include"} as DisplayMediaStreamOptions;
       const media=await capture(displayOptions),sourceTrack=media.getVideoTracks()[0],displayAudio=media.getAudioTracks()[0]||null,captured=sourceTrack.getSettings();
       if(!mobileDevice)await sourceTrack.applyConstraints({width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:fps,max:fps}}).catch(()=>{});
-      const stabilized=await stableCapture(media,fps,captured.width||size.width,captured.height||size.height),track=stabilized.track;captureCleanup.current=()=>{stabilized.stop();media.getTracks().forEach((t)=>t.stop())};screenTrack.current=track;screenAudioTrack.current=displayAudio;
-      const restore=async()=>{if(screenTrack.current!==track)return;roomTone("stream-stop");screenTrack.current=null;screenAudioTrack.current=null;stopSharingRef.current=null;captureCleanup.current?.();captureCleanup.current=null;local.current?.removeTrack(track);if(displayAudio)local.current?.removeTrack(displayAudio);setSharing(false);setStreamMenu(false);setTheaterStream("");const camera=cameraTrack.current;await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:!!camera&&camera.readyState==="live"})));await Promise.all([...peers.current.values()].map(async(pc)=>{const videoSender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(videoSender)await videoSender.replaceTrack(camera&&camera.readyState==="live"?camera:null);const audioSender=displayAudio?pc.getSenders().find(s=>s.track===displayAudio):null;if(audioSender)await audioSender.replaceTrack(null)}));track.stop();displayAudio?.stop();setLocalPreview();};
+      const stabilized=await stableCapture(media,fps,captured.width||size.width,captured.height||size.height),track=stabilized.track;captureCleanup.current=()=>{stabilized.stop();media.getTracks().forEach((t)=>t.stop())};screenTrack.current=track;
+      if(displayAudio){const mixed=mixShareAudio(microphoneTrack.current,displayAudio);screenAudioTrack.current=mixed.track;screenAudioCleanup.current=mixed.stop;setError("")}else{screenAudioTrack.current=null;screenAudioCleanup.current=null;setError("This capture source did not provide audio. Choose a browser tab and enable Share tab audio, or choose Entire Screen with system audio.")}
+      const outgoingAudio=screenAudioTrack.current;
+      const restore=async()=>{if(screenTrack.current!==track)return;roomTone("stream-stop");screenTrack.current=null;screenAudioTrack.current=null;stopSharingRef.current=null;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;local.current?.removeTrack(track);setSharing(false);setStreamMenu(false);setTheaterStream("");const camera=cameraTrack.current,microphone=microphoneTrack.current;await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:!!camera&&camera.readyState==="live"})));await Promise.all([...peers.current.values()].map(async(pc)=>{const videoSender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(videoSender)await videoSender.replaceTrack(camera&&camera.readyState==="live"?camera:null);const audioSender=outgoingAudio?pc.getSenders().find(s=>s.track===outgoingAudio):pc.getSenders().find(s=>s.track?.kind==="audio");if(audioSender)await audioSender.replaceTrack(microphone&&microphone.readyState==="live"?microphone:null)}));track.stop();displayAudio?.stop();setLocalPreview();};
       stopSharingRef.current=restore;
       sourceTrack.addEventListener("ended",()=>{void restore()},{once:true});
       const senders=[...peers.current.values()].map((pc)=>pc.getSenders().find((s)=>s.track?.kind==="video"));
-      local.current.addTrack(track);if(displayAudio)local.current.addTrack(displayAudio);let added=false;
-      const stableStream=new MediaStream(displayAudio?[track,displayAudio]:[track]);await Promise.all([...peers.current.values()].map(async(pc)=>{let sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{sender=pc.addTrack(track,stableStream);added=true;}if(displayAudio&&!pc.getSenders().some(s=>s.track===displayAudio)){pc.addTrack(displayAudio,stableStream);added=true}await tuneVideoSender(sender,fps,streamQuality)}));
+      local.current.addTrack(track);let added=false;
+      const stableStream=new MediaStream(outgoingAudio?[track,outgoingAudio]:[track]);await Promise.all([...peers.current.values()].map(async(pc)=>{let sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{sender=pc.addTrack(track,stableStream);added=true;}if(outgoingAudio){const audioSender=pc.getSenders().find(s=>s.track===microphoneTrack.current||s.track?.kind==="audio");if(audioSender)await audioSender.replaceTrack(outgoingAudio);else{pc.addTrack(outgoingAudio,stableStream);added=true}}await tuneVideoSender(sender,fps,streamQuality)}));
       setSharing(true);roomTone("stream-start");setLocalPreview(media);await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true})));if(added)await renegotiate();
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
