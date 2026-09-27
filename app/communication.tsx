@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { request, onlineChat, type LocalUser } from "@/lib/online";
 import Aemeath from "./aemeath";
-import {compressChatImage,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
+import {compressChatImage,imageFromClipboard,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import { CallProvider, useCalls } from "./call-provider";
 import MessageMenu from "./message-menu";
 import ImagePreview from "./image-preview";
@@ -589,6 +589,7 @@ function Inbox({
                   value={draft}
                   disabled={sending}
                   onChange={(e) => setDraft(e.target.value)}
+                  onPaste={async(e)=>{const file=imageFromClipboard(e.clipboardData);if(!file)return;e.preventDefault();setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name||"Pasted image");setError("")}catch(error){setError((error as Error).message)}finally{setSending(false)}}}
                   onKeyDown={(e) => {
                     if (
                       e.key === "Enter" &&

@@ -4,6 +4,7 @@ export const isImageMessage=(body:string)=>body.startsWith(IMAGE_PREFIX+"data:im
 export const isSpoilerImage=(body:string)=>body.startsWith(SPOILER_IMAGE_PREFIX);
 export const imageSource=(body:string)=>isSpoilerImage(body)?body.slice(SPOILER_IMAGE_PREFIX.length):isImageMessage(body)?body.slice(IMAGE_PREFIX.length):"";
 export const setImageSpoiler=(body:string,spoiler:boolean)=>IMAGE_PREFIX+(spoiler?"spoiler:":"")+imageSource(body);
+export function imageFromClipboard(data:DataTransfer){for(const item of Array.from(data.items||[]))if(item.kind==="file"&&item.type.startsWith("image/")){const file=item.getAsFile();if(file)return file}return null}
 export async function compressChatImage(file:File){
   if(!file.type.startsWith("image/"))throw new Error("Only image attachments are allowed.");
   if(file.size>15*1024*1024)throw new Error("Choose an image smaller than 15 MB.");

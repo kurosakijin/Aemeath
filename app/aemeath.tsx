@@ -37,7 +37,7 @@ import VoiceRoom from "./voice-room";
 import ServerSettings from "./server-settings";
 import MessageMenu from "./message-menu";
 import ImagePreview from "./image-preview";
-import {compressChatImage,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
+import {compressChatImage,imageFromClipboard,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import {
   SidebarProvider,
   Sidebar,
@@ -763,6 +763,7 @@ export default function Aemeath({
                 disabled={!current || sending}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onPaste={async(e)=>{const file=imageFromClipboard(e.clipboardData);if(!file)return;e.preventDefault();setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name||"Pasted image");setError("")}catch(error){setError((error as Error).message)}finally{setSending(false)}}}
                 onKeyDown={(e) => {
                   if (
                     e.key === "Enter" &&
