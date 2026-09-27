@@ -96,7 +96,7 @@ export async function POST(r: Request) {
       await participant(id, u.id);
       const body = str(d.body).trim(),
         messageId = str(d.id);
-      const image=body.startsWith("aemeath:image:data:image/");
+      const image=/^aemeath:image:(?:spoiler:)?data:image\//.test(body);
       if (!body || (!image&&body.length>4000) || (image&&body.length>400000) || !/^[a-f0-9-]{36}$/.test(messageId))
         throw new AppError("Send up to 4,000 characters or one compressed image.");
       const now = Date.now();

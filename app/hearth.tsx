@@ -30,10 +30,12 @@ import {
   Bell,
   Shield,
   ImagePlus,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import VoiceRoom from "./voice-room";
 import ServerSettings from "./server-settings";
-import {compressChatImage,imageSource,isImageMessage} from "@/lib/image-message";
+import {compressChatImage,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import {
   SidebarProvider,
   Sidebar,
@@ -69,6 +71,7 @@ function initials(name: string) {
     .join("")
     .toUpperCase();
 }
+function AttachmentDraft({source,name,spoiler,onSpoiler,onRemove,onReplace}:{source:string;name:string;spoiler:boolean;onSpoiler:()=>void;onRemove:()=>void;onReplace:(file:File)=>void}){return <div className="attachment-draft"><div className="attachment-tools"><button type="button" title={spoiler?"Remove spoiler":"Mark as spoiler"} onClick={onSpoiler}>{spoiler?<EyeOff size={17}/>:<Eye size={17}/>}</button><label title="Replace image"><Pencil size={16}/><input className="chat-image-input" type="file" accept="image/*" onChange={(e)=>{const file=e.target.files?.[0];e.target.value="";if(file)onReplace(file)}}/></label><button type="button" className="remove" title="Remove image" onClick={onRemove}><Trash2 size={17}/></button></div><div className={spoiler?"draft-image spoiler":"draft-image"}><img src={source} alt="Attachment preview"/></div><span>{name||"image.webp"}</span></div>}
 export default function Hearth({
   user,
   onSettings,
@@ -104,6 +107,7 @@ export default function Hearth({
     [showMembers, setShowMembers] = useState(true),
     [mobileMembers, setMobileMembers] = useState(false);
   const [voiceChat, setVoiceChat] = useState(false);
+  const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
   const [invitePreview,setInvitePreview]=useState<InvitePreview|null>(null),[inviteLoading,setInviteLoading]=useState(false);
   const [serverMenu, setServerMenu] = useState(false);
   const [channelType, setChannelType] = useState<"text" | "voice" | "forum">(
@@ -322,11 +326,11 @@ export default function Hearth({
       setBusy(false);
     }
   }
-  async function send(e?: React.FormEvent,attachment?:string) {
+  async function send(e?: React.FormEvent,overrideBody?:string) {
     e?.preventDefault();
     if ((!draft.trim()&&!attachment) || sending || !current) return;
     const target = current,
-      body = attachment||draft.trim();
+      body = overrideBody||(attachment?setImageSpoiler(attachment,attachmentSpoiler):draft.trim());
     if (
       !pending.current ||
       pending.current.body !== body ||
@@ -338,6 +342,7 @@ export default function Hearth({
       await api("", { action: "message", ...pending.current });
       if (room.current === target) {
         setDraft("");
+        setAttachment("");setAttachmentName("");setAttachmentSpoiler(false);
         pending.current = null;
         const d = await api("?channel=" + encodeURIComponent(target));
         if (room.current === target) setMessages(d.messages);
@@ -702,7 +707,7 @@ export default function Hearth({
                             minute: "2-digit",
                           })}
                         </time>
-                        {isImageMessage(m.body)?<img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>void e.currentTarget.requestFullscreen?.()}/>:<p>{m.body}</p>}
+                        {isImageMessage(m.body)?<div className={isSpoilerImage(m.body)?"spoiler-image":""}><img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>{e.currentTarget.parentElement?.classList.remove("spoiler-image");void e.currentTarget.requestFullscreen?.()}}/></div>:<p>{m.body}</p>}
                       </div>
                     </article>
                   </div>
@@ -725,14 +730,14 @@ export default function Hearth({
           {(!isVoice || voiceChat) && <div className={isVoice ? "composer-wrap voice-chat-drawer" : "composer-wrap"}>
             {isVoice && <div className="voice-chat-list">
               <div className="voice-chat-title"><MessageCircle size={17}/><strong>Channel chat</strong><button aria-label="Close channel chat" onClick={()=>setVoiceChat(false)}><X size={17}/></button></div>
-              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{new Date(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>void e.currentTarget.requestFullscreen?.()}/>:<p>{m.body}</p>}</div></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
+              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{new Date(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<div className={isSpoilerImage(m.body)?"spoiler-image":""}><img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>{e.currentTarget.parentElement?.classList.remove("spoiler-image");void e.currentTarget.requestFullscreen?.()}}/></div>:<p>{m.body}</p>}</div></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
             </div>}
-            <form
+            {attachment&&<AttachmentDraft source={imageSource(attachment)} name={attachmentName} spoiler={attachmentSpoiler} onSpoiler={()=>setAttachmentSpoiler(!attachmentSpoiler)} onRemove={()=>{setAttachment("");setAttachmentName("");setAttachmentSpoiler(false)}} onReplace={async(file)=>{setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name)}catch(error){setError((error as Error).message)}finally{setSending(false)}}}/>}<form
               className={"composer " + (!current ? "disabled" : "")}
               onSubmit={send}
             >
               <Hash size={19} />
-              <label className="attach-image" title="Attach an image" aria-label="Attach an image"><ImagePlus size={19}/><input className="chat-image-input" type="file" accept="image/*" disabled={!current||sending} onChange={async(e)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setSending(true);try{const image=await compressChatImage(file);setSending(false);await send(undefined,image)}catch(error){setError((error as Error).message);setSending(false)}}}/></label>
+              <label className="attach-image" title="Attach an image" aria-label="Attach an image"><ImagePlus size={19}/><input className="chat-image-input" type="file" accept="image/*" disabled={!current||sending} onChange={async(e)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name)}catch(error){setError((error as Error).message)}finally{setSending(false)}}}/></label>
               <textarea
                 rows={1}
                 aria-label={"Message #" + (channel?.name || "general")}
@@ -759,7 +764,7 @@ export default function Hearth({
               <button
                 type="submit"
                 aria-label="Send message"
-                disabled={!current || !draft.trim() || sending}
+                disabled={!current || (!draft.trim()&&!attachment) || sending}
               >
                 <ArrowUp size={20} />
               </button>

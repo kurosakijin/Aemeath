@@ -158,7 +158,7 @@ export async function POST(request: Request) {
     }
     if (action === "message") {
       const body = typeof data.body === "string" ? data.body.trim() : "";
-      const image=body.startsWith("aemeath:image:data:image/");
+      const image=/^aemeath:image:(?:spoiler:)?data:image\//.test(body);
       if (!body || (!image&&body.length>4000) || (image&&body.length>400000))
         return bad("Send up to 4,000 characters or one compressed image.");
       if (

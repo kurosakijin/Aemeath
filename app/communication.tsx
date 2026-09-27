@@ -15,6 +15,10 @@ import {
   Lock,
   AtSign,
   ImagePlus,
+  Eye,
+  EyeOff,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -29,7 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { request, onlineChat, type LocalUser } from "@/lib/online";
 import Hearth from "./hearth";
-import {compressChatImage,imageSource,isImageMessage} from "@/lib/image-message";
+import {compressChatImage,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import { CallProvider, useCalls } from "./call-provider";
 type Conversation = {
   id: string;
@@ -91,6 +95,7 @@ function Inbox({
     [starting, setStarting] = useState(false),
     [more, setMore] = useState(false),
     [olderLoading, setOlderLoading] = useState(false);
+  const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
   const bottom = useRef<HTMLDivElement>(null),
     current = useRef(""),
     pending = useRef<{ id: string; body: string; conversation: string } | null>(
@@ -213,11 +218,11 @@ function Inbox({
       setStarting(false);
     }
   }
-  async function send(e?: React.FormEvent,attachment?:string) {
+  async function send(e?: React.FormEvent,overrideBody?:string) {
     e?.preventDefault();
     if (!selected || (!draft.trim()&&!attachment) || sending) return;
     const id = selected;
-    const body = attachment||draft.trim();
+    const body = overrideBody||(attachment?setImageSpoiler(attachment,attachmentSpoiler):draft.trim());
     if (
       !pending.current ||
       pending.current.body !== body ||
@@ -229,6 +234,7 @@ function Inbox({
       await request("/api/direct", { action: "send", ...pending.current });
       if (current.current === id) {
         setDraft("");
+        setAttachment("");setAttachmentName("");setAttachmentSpoiler(false);
         pending.current = null;
         const d = await request<{ messages: Message[] }>(
           "/api/direct?conversation=" + id,
@@ -516,7 +522,7 @@ function Inbox({
                             },
                           )}
                         </time>
-                        {isImageMessage(m.body)?<img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>void e.currentTarget.requestFullscreen?.()}/>:<p>{m.body}</p>}
+                        {isImageMessage(m.body)?<div className={isSpoilerImage(m.body)?"spoiler-image":""}><img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>{e.currentTarget.parentElement?.classList.remove("spoiler-image");void e.currentTarget.requestFullscreen?.()}}/></div>:<p>{m.body}</p>}
                       </div>
                     </article>
                   </div>
@@ -569,8 +575,9 @@ function Inbox({
           </div>
           {conversation && (
             <div className="composer-wrap">
+              {attachment&&<AttachmentDraft source={imageSource(attachment)} name={attachmentName} spoiler={attachmentSpoiler} onSpoiler={()=>setAttachmentSpoiler(!attachmentSpoiler)} onRemove={()=>{setAttachment("");setAttachmentName("");setAttachmentSpoiler(false)}} onReplace={async(file)=>{setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name)}catch(error){setError((error as Error).message)}finally{setSending(false)}}}/>}
               <form className="composer" onSubmit={send}>
-                <label className="attach-image" title="Attach an image" aria-label="Attach an image"><ImagePlus size={19}/><input className="chat-image-input" type="file" accept="image/*" disabled={sending} onChange={async(e)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setSending(true);try{const image=await compressChatImage(file);setSending(false);await send(undefined,image)}catch(error){setError((error as Error).message);setSending(false)}}}/></label>
+                <label className="attach-image" title="Attach an image" aria-label="Attach an image"><ImagePlus size={19}/><input className="chat-image-input" type="file" accept="image/*" disabled={sending} onChange={async(e)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name)}catch(error){setError((error as Error).message)}finally{setSending(false)}}}/></label>
                 <textarea
                   rows={1}
                   aria-label={"Message " + conversation.name}
@@ -593,7 +600,7 @@ function Inbox({
                 <button
                   type="submit"
                   aria-label="Send direct message"
-                  disabled={sending || !draft.trim()}
+                  disabled={sending || (!draft.trim()&&!attachment)}
                 >
                   <ArrowUp size={20} />
                 </button>
@@ -665,6 +672,7 @@ function Inbox({
     </SidebarProvider>
   );
 }
+function AttachmentDraft({source,name,spoiler,onSpoiler,onRemove,onReplace}:{source:string;name:string;spoiler:boolean;onSpoiler:()=>void;onRemove:()=>void;onReplace:(file:File)=>void}){return <div className="attachment-draft"><div className="attachment-tools"><button type="button" title={spoiler?"Remove spoiler":"Mark as spoiler"} onClick={onSpoiler}>{spoiler?<EyeOff size={17}/>:<Eye size={17}/>}</button><label title="Replace image"><Pencil size={16}/><input className="chat-image-input" type="file" accept="image/*" onChange={(e)=>{const file=e.target.files?.[0];e.target.value="";if(file)onReplace(file)}}/></label><button type="button" className="remove" title="Remove image" onClick={onRemove}><Trash2 size={17}/></button></div><div className={spoiler?"draft-image spoiler":"draft-image"}><img src={source} alt="Attachment preview"/></div><span>{name||"image.webp"}</span></div>}
 export default function Communication({
   user,
   onSettings,
