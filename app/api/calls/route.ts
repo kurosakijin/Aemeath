@@ -63,8 +63,17 @@ export async function GET(r: Request) {
             "stun:stun1.l.google.com:19302",
           ],
         },
+        {
+          urls: [
+            "turn:openrelay.metered.ca:80",
+            "turn:openrelay.metered.ca:443",
+            "turn:openrelay.metered.ca:443?transport=tcp",
+          ],
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ];
-      let relay = false;
+      let relay = true;
       const raw = process.env.ICE_SERVERS_JSON;
       if (raw) {
         const extra = JSON.parse(raw) as RTCIceServer[];

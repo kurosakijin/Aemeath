@@ -130,7 +130,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     peers = useRef(new Map<string, RTCPeerConnection>()), peerSlots=useRef(new Map<string,PeerSlots>()), names = useRef(new Map<string, string>()),
     pendingIce=useRef(new Map<string,RTCIceCandidateInit[]>()),seenSignals=useRef(new Set<string>()),polling=useRef(false),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
-    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>()),voiceSession=useRef(crypto.randomUUID());
+    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>()),restartAttempts=useRef(new Map<string,number>()),voiceSession=useRef(crypto.randomUUID());
 
   const voicePost=useCallback((data:Record<string,unknown>)=>post(channel,{...data,session:voiceSession.current}),[channel]);
   const signal = useCallback((to: string, body: unknown) => voicePost({ action: "signal", to, body: JSON.stringify(body) }), [voicePost]);
@@ -150,6 +150,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   }, []);
   const closePeer = useCallback((id: string) => {
     const timer=disconnectTimers.current.get(id);if(timer)clearTimeout(timer);disconnectTimers.current.delete(id);
+    restartAttempts.current.delete(id);
     peers.current.get(id)?.close(); peers.current.delete(id);peerSlots.current.delete(id);pendingIce.current.delete(id);
     setRemotes((old) => old.filter((r) => r.id !== id));
   }, []);
@@ -170,8 +171,13 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     pc.onconnectionstatechange = () => {
       const oldTimer=disconnectTimers.current.get(person.id);if(oldTimer){clearTimeout(oldTimer);disconnectTimers.current.delete(person.id)}
       if(pc.connectionState==="disconnected")disconnectTimers.current.set(person.id,setTimeout(()=>{if(pc.connectionState==="disconnected")closePeer(person.id)},8000));
-      if(pc.connectionState==="failed")setError("Voice media is reconnecting. Some mobile networks require a TURN relay for reliable group calls.");
-      if(["failed","closed"].includes(pc.connectionState))closePeer(person.id);
+      if(pc.connectionState==="connected"){restartAttempts.current.delete(person.id);setError(current=>current.startsWith("Voice media is reconnecting")?"":current)}
+      if(pc.connectionState==="failed"){
+        const attempts=restartAttempts.current.get(person.id)||0;
+        if(attempts<2){restartAttempts.current.set(person.id,attempts+1);setError("Voice media is reconnecting through the relay…");void (async()=>{try{if(pc.signalingState!=="stable")return;pc.restartIce();await pc.setLocalDescription(await pc.createOffer({iceRestart:true}));await finishIce(pc,3000);await signal(person.id,{type:"description",description:pc.localDescription})}catch{closePeer(person.id)}})()}
+        else closePeer(person.id);
+      }
+      if(pc.connectionState==="closed")closePeer(person.id);
     };
     return pc;
   }, [closePeer, signal, streamFps, streamQuality]);
