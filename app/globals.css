@@ -1292,6 +1292,7 @@ svg {
   padding: 10px 12px;
   margin: 0;
 }
+.verification-code{font-size:25px!important;font-weight:800!important;letter-spacing:.28em!important;text-align:center;font-variant-numeric:tabular-nums}.verification-card .auth-subtitle strong{color:#f1bfd5}.verification-back{display:block;margin:0 auto;background:transparent;color:#989aa4;font-size:13px}.verification-back:hover{color:#ff9bc8}
 .account-loading {
   height: 100dvh;
   display: flex;

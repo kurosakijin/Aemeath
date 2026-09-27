@@ -12,6 +12,8 @@ async function ensureSchema() {
     CREATE TABLE IF NOT EXISTS auth_sessions(hash TEXT PRIMARY KEY,"user" TEXT NOT NULL REFERENCES accounts(id),expires BIGINT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions("user");
     CREATE TABLE IF NOT EXISTS auth_limits("key" TEXT PRIMARY KEY,hits INTEGER NOT NULL,expires BIGINT NOT NULL);
+    CREATE TABLE IF NOT EXISTS auth_challenges(id TEXT PRIMARY KEY,purpose TEXT NOT NULL,email TEXT NOT NULL,account_id TEXT,payload TEXT NOT NULL,code_hash TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,expires BIGINT NOT NULL,created BIGINT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_auth_challenges_email ON auth_challenges(email,purpose);
     CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,first TEXT NOT NULL REFERENCES accounts(id),second TEXT NOT NULL REFERENCES accounts(id),created BIGINT NOT NULL,updated BIGINT NOT NULL,pair TEXT NOT NULL UNIQUE);
     CREATE INDEX IF NOT EXISTS idx_conversations_first ON conversations(first);
     CREATE INDEX IF NOT EXISTS idx_conversations_second ON conversations(second);
