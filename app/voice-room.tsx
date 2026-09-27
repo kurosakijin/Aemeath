@@ -128,7 +128,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const [streamMenu,setStreamMenu]=useState(false);
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), peerSlots=useRef(new Map<string,PeerSlots>()), names = useRef(new Map<string, string>()),
-    pendingIce=useRef(new Map<string,RTCIceCandidateInit[]>()),
+    pendingIce=useRef(new Map<string,RTCIceCandidateInit[]>()),seenSignals=useRef(new Set<string>()),polling=useRef(false),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
     microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null);
 
@@ -177,6 +177,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       if (pc.signalingState !== "stable") { await pc.setLocalDescription({ type: "rollback" }); }
       await pc.setRemoteDescription(description);for(const candidate of pendingIce.current.get(item.from)||[])try{await pc.addIceCandidate(candidate)}catch{}pendingIce.current.delete(item.from);await pc.setLocalDescription(await pc.createAnswer());await finishIce(pc);
       await signal(item.from, { type: "description", description: pc.localDescription });
+      if(screenTrack.current||cameraTrack.current)await signal(item.from,{type:"stream-state",active:true});
     } else if (description.type === "answer" && pc.signalingState === "have-local-offer"){await pc.setRemoteDescription(description);for(const candidate of pendingIce.current.get(item.from)||[])try{await pc.addIceCandidate(candidate)}catch{}pendingIce.current.delete(item.from)}
   }, [makePeer, signal]);
 
@@ -200,19 +201,22 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   useEffect(() => {
     if (!joined) return;
     const poll = async () => {
+      if(polling.current)return;polling.current=true;
       try {
-        const response = await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${after.current}`, { cache: "no-store" });
+        const response = await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Math.max(0,after.current-3000)}`, { cache: "no-store" });
         const data = await response.json() as Record<string, any>; if (!response.ok) throw new Error(data.error);
-        after.current = data.now || Date.now(); const list = (data.members || []) as Person[],live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));
+        after.current = Math.max(after.current,data.now||Date.now()); const list = (data.members || []) as Person[],live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));
         if (knownMembers.current) {
           const joinedPerson=live.find((p) => p.id !== user.id && !knownMembers.current!.has(p.id));if(joinedPerson)void notifyAemeath({key:`voice-${channel}-${joinedPerson.id}-${Date.now()}`,title:`${joinedPerson.name} joined ${name}`,body:"Someone joined your voice lobby",kind:"join"})
           if ([...knownMembers.current].some((id) => id !== user.id && !nextMembers.has(id))) roomTone("leave");
         }
         knownMembers.current = nextMembers; setMembers(list); live.forEach((p) => names.current.set(p.id, p.name));
-        for (const item of (data.signals || []) as Signal[]) await handleSignal(item);
+        for (const item of (data.signals || []) as Signal[]){if(seenSignals.current.has(item.id))continue;await handleSignal(item);seenSignals.current.add(item.id)}
+        if(seenSignals.current.size>1000)seenSignals.current=new Set([...seenSignals.current].slice(-500));
         for (const p of live) if (p.id !== user.id && !peers.current.has(p.id) && user.id < p.id) await offer(p);
         for (const id of [...peers.current.keys()]) if (!live.some((p) => p.id === id)){closePeer(id);setRemoteSharing((old)=>{const next=new Set(old);next.delete(id);return next})}
       } catch (e) { if (alive.current) setError((e as Error).message || "Could not refresh the voice room."); }
+      finally{polling.current=false}
     };
     void poll(); const timer = setInterval(() => { void post(channel, { action: "heartbeat" }); void poll(); }, 1500);
     return () => clearInterval(timer);
@@ -285,7 +289,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
   function setLocalPreview(stream:MediaStream|null=local.current){if(localVideo.current)localVideo.current.srcObject=stream}
-  const participantCount=Math.min(30,Math.max(1,1+remotes.length)),columns=participantCount<=9?3:participantCount<=16?4:participantCount<=25?5:6,rows=participantCount<=9?3:participantCount<=16?4:5,hasStreams=sharing||camera||remoteSharing.size>0;
+  const visibleMembers=members.filter(member=>!member.reconnecting),participantCount=Math.min(30,Math.max(1,visibleMembers.length)),columns=participantCount<=9?3:participantCount<=16?4:participantCount<=25?5:6,rows=participantCount<=9?3:participantCount<=16?4:5,hasStreams=sharing||camera||remoteSharing.size>0;
   return <section className={`voice-room${joined?" joined":""}${joined&&!hasStreams?" no-streams":""}`} style={{"--voice-columns":columns,"--voice-rows":rows} as React.CSSProperties}>
     {!joined ? <div className="voice-empty"><div className="voice-orb"><VolumeIcon /></div><h1>{name}</h1><p>{members.filter(m=>!m.reconnecting).length?`${members.filter(m=>!m.reconnecting).length} ${members.filter(m=>!m.reconnecting).length===1?"person is":"people are"} in voice`:"No one is currently in voice"}</p>{members.length>0&&<div className="voice-waiting-members">{members.map((person)=>{const remaining=person.reconnecting?Math.max(0,10-Math.floor((clock-Number(person.left_at||clock))/1000)):0;return <div key={person.id}><span>{person.name.slice(0,2).toUpperCase()}</span><strong>{person.name}</strong><i className={person.reconnecting?"reconnecting":""}>{person.reconnecting?`Reconnecting · ${remaining}s`:"Connected"}</i></div>})}</div>}<button className="voice-join" disabled={busy} onClick={join}>{busy ? "Joining…" : members.some(m=>m.id===user.id&&m.reconnecting)?"Rejoin Voice":"Join Voice"}</button></div> : <>
       {(sharing||camera||remoteSharing.size>0)&&<div className={"stream-deck "+(theaterStream?"theater":"")}>
@@ -296,7 +300,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       <RemoteAudioMixer remotes={remotes} speakerId={speakerId}/>
       <div className={"voice-grid "+((sharing||camera||remoteSharing.size)?"with-streams":"")}>
         <div className="voice-tile local"><div className="voice-avatar">{user.name.slice(0,2).toUpperCase()}</div>{(sharing||camera)&&<span className="streaming-badge"><MonitorUp size={13}/> Streaming</span>}<span>{user.name} · You</span></div>
-        {remotes.map((remote) => <div className="voice-tile" key={remote.id}><div className="voice-avatar">{remote.name.slice(0,2).toUpperCase()}</div>{remoteSharing.has(remote.id)&&<span className="streaming-badge"><MonitorUp size={13}/> Streaming</span>}<span>{remote.name}</span></div>)}
+        {visibleMembers.filter(member=>member.id!==user.id).map((member) => {const remote=remotes.find(item=>item.id===member.id);return <div className="voice-tile" key={member.id}><div className="voice-avatar">{member.name.slice(0,2).toUpperCase()}</div>{remoteSharing.has(member.id)&&<span className="streaming-badge"><MonitorUp size={13}/> Streaming</span>}<span>{member.name}{remote?"":" · Connecting…"}</span></div>})}
       </div>
       <div className="voice-status"><Users size={15}/> {members.filter(m=>!m.reconnecting).length} connected</div>
       <div className="voice-controls"><button className={muted ? "off" : ""} aria-label={muted ? "Enable microphone" : "Mute"} onClick={()=>void toggleMute()}>{muted?<MicOff/>:<Mic/>}</button><button className={camera ? "active" : ""} aria-label="Toggle camera" onClick={toggleCamera}>{camera?<Camera/>:<CameraOff/>}</button>{mobileDevice&&camera&&<button className="active" aria-label="Switch between front and rear camera" title="Switch camera" onClick={()=>void switchMobileCamera()}><SwitchCamera/></button>}{(sharing||screenShareSupported)&&<div className="stream-control"><button className={sharing ? "active has-menu" : ""} aria-label={sharing?"Stream options":mobileDevice?"Share phone screen":"Share screen"} onClick={()=>sharing?setStreamMenu(!streamMenu):void shareScreen()}><MonitorUp/>{sharing&&<ChevronDown size={13}/>}</button>{streamMenu&&sharing&&<div className="stream-control-menu"><button onClick={()=>void stopSharingRef.current?.()}><X size={15}/> Stop streaming</button><button onClick={async()=>{await stopSharingRef.current?.();await shareScreen()}}><MonitorUp size={15}/> Change stream</button><div/><button onClick={()=>setError("Stream diagnostics are ready. Try another share source if the video is black.")}><MoreHorizontal size={15}/> Report a problem</button></div>}</div>}<button className={settings ? "active" : ""} aria-label="Voice settings" onClick={()=>{setSettings(!settings);void refreshDevices();}}><Settings/></button><button className="hangup" aria-label="Leave voice" onClick={leave}><PhoneOff/></button></div>
