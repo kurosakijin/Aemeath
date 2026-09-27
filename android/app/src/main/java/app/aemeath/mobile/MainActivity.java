@@ -37,13 +37,14 @@ public class MainActivity extends BridgeActivity {
 
     private void checkForUpdate(){new Thread(()->{
         try{
-            HttpURLConnection connection=(HttpURLConnection)new URL(RELEASE_API).openConnection();connection.setRequestProperty("Accept","application/vnd.github+json");connection.setRequestProperty("User-Agent","Aemeath-Android/"+BuildConfig.VERSION_NAME);connection.setConnectTimeout(10000);connection.setReadTimeout(10000);
+            String current=currentVersion();HttpURLConnection connection=(HttpURLConnection)new URL(RELEASE_API).openConnection();connection.setRequestProperty("Accept","application/vnd.github+json");connection.setRequestProperty("User-Agent","Aemeath-Android/"+current);connection.setConnectTimeout(10000);connection.setReadTimeout(10000);
             BufferedReader reader=new BufferedReader(new InputStreamReader(connection.getInputStream()));StringBuilder json=new StringBuilder();String line;while((line=reader.readLine())!=null)json.append(line);reader.close();
-            JSONObject release=new JSONObject(json.toString());String version=release.getString("tag_name").replaceFirst("^v","");if(!newer(version,BuildConfig.VERSION_NAME))return;
+            JSONObject release=new JSONObject(json.toString());String version=release.getString("tag_name").replaceFirst("^v","");if(!newer(version,current))return;
             JSONArray assets=release.getJSONArray("assets");String download=null;for(int i=0;i<assets.length();i++){JSONObject asset=assets.getJSONObject(i);if("Aemeath-Android.apk".equals(asset.getString("name"))){download=asset.getString("browser_download_url");break;}}
             if(download!=null){String url=download;runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Aemeath update available").setMessage("Version "+version+" is ready. Download and install it now?").setNegativeButton("Later",null).setPositiveButton("Update",(dialog,which)->downloadUpdate(url)).show());}
         }catch(Exception ignored){}
     }).start();}
+    private String currentVersion(){try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){return "0.0.0";}}
     private boolean newer(String latest,String current){String[] a=latest.split("\\."),b=current.split("\\.");for(int i=0;i<Math.max(a.length,b.length);i++){int x=i<a.length?number(a[i]):0,y=i<b.length?number(b[i]):0;if(x!=y)return x>y;}return false;}
     private int number(String value){try{return Integer.parseInt(value.replaceAll("[^0-9].*$",""));}catch(Exception ignored){return 0;}}
     private void downloadUpdate(String url){
