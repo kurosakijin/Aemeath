@@ -105,7 +105,7 @@ button {
 svg {
   flex-shrink: 0;
 }
-.hearth-app {
+.aemeath-app {
   width: 100%;
   height: 100dvh;
   display: flex;
@@ -892,18 +892,18 @@ svg {
 .modal-form .form-label {
   margin: 0;
 }
-.hearth-dialog {
+.aemeath-dialog {
   border: 1px solid #45413b !important;
   background: #26282d !important;
   padding: 30px !important;
   border-radius: 14px !important;
 }
-.hearth-dialog [data-slot="dialog-title"] {
+.aemeath-dialog [data-slot="dialog-title"] {
   font-size: 24px;
   font-weight: 600;
   letter-spacing: -0.025em;
 }
-.hearth-dialog [data-slot="dialog-description"] {
+.aemeath-dialog [data-slot="dialog-description"] {
   line-height: 1.7;
   margin-bottom: 8px;
 }

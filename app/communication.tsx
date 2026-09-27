@@ -32,7 +32,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { request, onlineChat, type LocalUser } from "@/lib/online";
-import Hearth from "./hearth";
+import Aemeath from "./aemeath";
 import {compressChatImage,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import { CallProvider, useCalls } from "./call-provider";
 import MessageMenu from "./message-menu";
@@ -286,7 +286,7 @@ function Inbox({
   };
   if (serverView !== null)
     return (
-      <Hearth
+      <Aemeath
         user={user}
         onSettings={onSettings}
         onDirect={() => setServerView(null)}
@@ -296,7 +296,7 @@ function Inbox({
     );
   return (
     <SidebarProvider>
-      <div className="hearth-app dm-app">
+      <div className="aemeath-app dm-app">
         <nav className="server-rail" aria-label="Home and servers">
           <div className="brand-icon" title="Aemeath">
             <Flame size={27} />
@@ -621,7 +621,7 @@ function Inbox({
           if (!starting) setDialog(v);
         }}
       >
-        <DialogContent className="hearth-dialog">
+        <DialogContent className="aemeath-dialog">
           <DialogTitle>Start a conversation</DialogTitle>
           <DialogDescription>
             Find someone by their exact Aemeath username.

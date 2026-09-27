@@ -1,5 +1,5 @@
 {
-  "name": "site-creator-vinext-starter",
+  "name": "aemeath",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -65,5 +65,6 @@
     "miniflare": {
       "sharp": "0.35.4"
     }
-  }
+  },
+  "description": "A private community chat app with servers, direct messages, voice rooms, screen sharing, and image attachments."
 }

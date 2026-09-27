@@ -76,7 +76,7 @@ function initials(name: string) {
 }
 function messageDate(value:number|string){const timestamp=Number(value);return new Date(Number.isFinite(timestamp)&&timestamp>=0?timestamp:0)}
 function AttachmentDraft({source,name,spoiler,onSpoiler,onRemove,onReplace}:{source:string;name:string;spoiler:boolean;onSpoiler:()=>void;onRemove:()=>void;onReplace:(file:File)=>void}){return <div className="attachment-draft"><div className="attachment-tools"><button type="button" title={spoiler?"Remove spoiler":"Mark as spoiler"} onClick={onSpoiler}>{spoiler?<EyeOff size={17}/>:<Eye size={17}/>}</button><label title="Replace image"><Pencil size={16}/><input className="chat-image-input" type="file" accept="image/*" onChange={(e)=>{const file=e.target.files?.[0];e.target.value="";if(file)onReplace(file)}}/></label><button type="button" className="remove" title="Remove image" onClick={onRemove}><Trash2 size={17}/></button></div><div className={spoiler?"draft-image spoiler":"draft-image"}><img src={source} alt="Attachment preview"/></div><span>{name||"image.webp"}</span></div>}
-export default function Hearth({
+export default function Aemeath({
   user,
   onSettings,
   onDirect,
@@ -377,7 +377,7 @@ export default function Hearth({
   if (modal === "server-settings" && server) return <ServerSettings server={server} members={members} onClose={()=>setModal("")} onInvite={()=>{setModal("");void invite()}} onSave={async(value)=>{await api("",{action:"edit-server",server:server.id,...value});await refreshServers(server.id)}}/>;
   return (
     <SidebarProvider>
-      <div className="hearth-app">
+      <div className="aemeath-app">
         <nav className="server-rail" aria-label="Servers">
           <div className="brand-icon" title="Aemeath">
             <Flame size={27} />
@@ -841,7 +841,7 @@ export default function Hearth({
           if (!busy && !v) setModal("");
         }}
       >
-        <DialogContent className="hearth-dialog">
+        <DialogContent className="aemeath-dialog">
           <DialogTitle>
             {modal === "picker"
               ? "Create Your Server"
