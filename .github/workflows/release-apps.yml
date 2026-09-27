@@ -17,6 +17,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix desktop
       - run: npm run desktop:build
       - shell: pwsh
         run: Copy-Item release/Aemeath-Setup-*.exe release/Aemeath-Windows.exe
