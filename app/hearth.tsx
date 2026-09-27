@@ -51,6 +51,7 @@ type Channel = {
   topic?: string;
 };
 type Member = { id: string; name: string };
+type InvitePreview = { code:string; expires:number; id:string; name:string; icon?:string; banner?:string; inviter:string; members:number };
 type Message = {
   id: string;
   user: string;
@@ -101,6 +102,7 @@ export default function Hearth({
     [showMembers, setShowMembers] = useState(true),
     [mobileMembers, setMobileMembers] = useState(false);
   const [voiceChat, setVoiceChat] = useState(false);
+  const [invitePreview,setInvitePreview]=useState<InvitePreview|null>(null),[inviteLoading,setInviteLoading]=useState(false);
   const [serverMenu, setServerMenu] = useState(false);
   const [channelType, setChannelType] = useState<"text" | "voice" | "forum">(
       "text",
@@ -144,6 +146,8 @@ export default function Hearth({
     if (invite) {
       setModal("join");
       setField(invite);
+      setInviteLoading(true);
+      api("?invite="+encodeURIComponent(invite)).then((d)=>setInvitePreview(d.invite as InvitePreview)).catch((e)=>setFormError(e.message)).finally(()=>setInviteLoading(false));
     }
     if (!user) return;
     refreshServers()
@@ -235,6 +239,12 @@ export default function Hearth({
           if (value.startsWith("http"))
             value = new URL(value).searchParams.get("invite") || "";
         } catch {}
+        if (!invitePreview) {
+          const preview = await api("?invite="+encodeURIComponent(value));
+          setField(value);
+          setInvitePreview(preview.invite as InvitePreview);
+          return;
+        }
         const d = await api("", { action: "join", code: value });
         await refreshServers(d.id);
         window.history.replaceState(null, "", window.location.pathname);
@@ -911,15 +921,9 @@ export default function Hearth({
                     <label className="form-label" htmlFor="invite-url">
                       Invitation link · expires in 7 days
                     </label>
-                    <input
-                      id="invite-url"
-                      className="form-input"
-                      readOnly
-                      value={code}
-                      onFocus={(e) => e.target.select()}
-                    />
+                    <div className="invite-copy-row">
+                    <input id="invite-url" readOnly value={code} onFocus={(e) => e.target.select()} />
                     <button
-                      className="primary"
                       onClick={async () => {
                         try {
                           await navigator.clipboard.writeText(code);
@@ -932,8 +936,9 @@ export default function Hearth({
                       }}
                     >
                       {copied ? <Check size={17} /> : <Copy size={17} />}{" "}
-                      {copied ? "Copied" : "Copy invitation"}
+                      {copied ? "Copied" : "Copy"}
                     </button>
+                    </div>
                     <p className="muted-text">
                       Friends need a Aemeath account and access to this private
                       site before joining.
@@ -947,6 +952,18 @@ export default function Hearth({
                 </p>
               )}
             </>
+          ) : modal === "join" && (invitePreview || inviteLoading) ? (
+            <div className="invite-preview-wrap">
+              {inviteLoading ? <p className="muted-text" role="status">Opening invitation…</p> : invitePreview && <>
+                <div className="invite-server-art" style={{"--invite-banner":invitePreview.banner||"#ff5ca8"} as React.CSSProperties}><div className="invite-server-icon">{invitePreview.icon?<img src={invitePreview.icon} alt=""/>:initials(invitePreview.name)}</div></div>
+                <p className="invite-kicker"><strong>{invitePreview.inviter}</strong> invited you to join</p>
+                <h2>{invitePreview.name}</h2>
+                <div className="invite-stats"><span><i/> {invitePreview.members} member{Number(invitePreview.members)===1?"":"s"}</span><span>Private server</span></div>
+                {formError&&<p className="form-error" role="alert">{formError}</p>}
+                <button className="primary invite-accept" disabled={busy} onClick={(e)=>void submit(e as unknown as React.FormEvent)}>{busy?"Joining…":"Accept invite"}<ArrowRight size={17}/></button>
+                <button className="invite-use-code" onClick={()=>{setInvitePreview(null);setFormError("")}}>Use a different invite</button>
+              </>}
+            </div>
           ) : (
             <form onSubmit={submit} className="modal-form">
               <label className="form-label" htmlFor="modal-field">
@@ -972,7 +989,7 @@ export default function Hearth({
                         : ""
                 }
                 value={field}
-                onChange={(e) => setField(e.target.value)}
+                onChange={(e) => {setField(e.target.value);if(modal==="join")setInvitePreview(null)}}
                 maxLength={
                   modal === "join"
                     ? 500

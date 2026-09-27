@@ -14,10 +14,17 @@ async function membership(server: string, user: string) {
 }
 export async function GET(request: Request) {
   try {
-    const user = await getChatGPTUser();
-    if (!user) return bad("Please sign in to continue.", 401);
     const db = database();
     const url = new URL(request.url);
+    const inviteCode = url.searchParams.get("invite");
+    if (inviteCode) {
+      if (!/^[a-f0-9]{12,32}$/.test(inviteCode)) return bad("This invitation link is invalid.");
+      const invite = await db.prepare(`SELECT i.code,i.expires,s.id,s.name,s.icon,s.banner,COALESCE(p.name,'A friend') AS inviter,(SELECT COUNT(*) FROM members m WHERE m.server=s.id) AS members FROM invites i JOIN servers s ON s.id=i.server LEFT JOIN profiles p ON p.id=s.owner WHERE i.code=? AND i.expires>?`).bind(inviteCode,Date.now()).first();
+      if (!invite) return bad("This invite has expired or is no longer available.",404);
+      return json({invite});
+    }
+    const user = await getChatGPTUser();
+    if (!user) return bad("Please sign in to continue.", 401);
     const server = url.searchParams.get("server");
     const channel = url.searchParams.get("channel");
     if (channel) {
@@ -133,7 +140,7 @@ export async function POST(request: Request) {
     }
     if (action === "join") {
       const code = typeof data.code === "string" ? data.code.trim() : "";
-      if (!/^[a-f0-9]{32}$/.test(code))
+      if (!/^[a-f0-9]{12,32}$/.test(code))
         return bad("Enter a valid invitation code.");
       const invite = await db
         .prepare("SELECT server FROM invites WHERE code=? AND expires>?")
@@ -258,7 +265,7 @@ export async function POST(request: Request) {
       return json({ ok: true });
     }
     if (action === "invite") {
-      const code = crypto.randomUUID().replaceAll("-", "");
+      const code = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
       await db
         .prepare("INSERT INTO invites (code,server,expires) VALUES (?,?,?)")
         .bind(code, server.id, now + 7 * 86400000)
