@@ -23,6 +23,18 @@ async function tuneVideoSender(sender: RTCRtpSender | undefined, fps: number, qu
   } catch { /* Some mobile browsers manage sender quality automatically. */ }
 }
 
+async function stableCapture(media:MediaStream,fps:number,width:number,height:number){
+  const source=media.getVideoTracks()[0],video=document.createElement("video"),canvas=document.createElement("canvas"),sample=document.createElement("canvas");
+  video.muted=true;video.playsInline=true;video.srcObject=new MediaStream([source]);
+  canvas.width=source.getSettings().width||width;canvas.height=source.getSettings().height||height;sample.width=32;sample.height=18;
+  const context=canvas.getContext("2d",{alpha:false}),probe=sample.getContext("2d",{willReadFrequently:true}),stream=canvas.captureStream(fps),track=stream.getVideoTracks()[0];
+  track.contentHint="motion";let stopped=false,frameHandle=0,timer:ReturnType<typeof setInterval>|null=null;
+  const draw=()=>{if(stopped||video.readyState<2||!context||!probe)return;try{probe.drawImage(video,0,0,32,18);const pixels=probe.getImageData(0,0,32,18).data;let visible=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]+pixels[i+1]+pixels[i+2]>10)visible++;if(visible>8)context.drawImage(video,0,0,canvas.width,canvas.height)}catch{/* Retain the last valid frame. */}};
+  await video.play();
+  if("requestVideoFrameCallback" in video){const next=()=>{draw();if(!stopped)frameHandle=(video as HTMLVideoElement&{requestVideoFrameCallback:(callback:()=>void)=>number}).requestVideoFrameCallback(next)};frameHandle=(video as HTMLVideoElement&{requestVideoFrameCallback:(callback:()=>void)=>number}).requestVideoFrameCallback(next)}else timer=setInterval(draw,Math.max(8,1000/fps));
+  return {track,stop:()=>{stopped=true;if(frameHandle&&"cancelVideoFrameCallback" in video)(video as HTMLVideoElement&{cancelVideoFrameCallback:(id:number)=>void}).cancelVideoFrameCallback(frameHandle);if(timer)clearInterval(timer);video.pause();video.srcObject=null;stream.getTracks().forEach((t)=>t.stop())}};
+}
+
 let roomAudio: AudioContext | null = null;
 function roomTone(kind: "join" | "leave" | "stream-start" | "stream-stop" | "watch-start" | "watch-stop") {
   try {
@@ -77,7 +89,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), names = useRef(new Map<string, string>()),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
-    screenTrack = useRef<MediaStreamTrack | null>(null), cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null);
+    screenTrack = useRef<MediaStreamTrack | null>(null), cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null);
 
   const signal = useCallback((to: string, body: unknown) => post(channel, { action: "signal", to, body: JSON.stringify(body) }), [channel]);
   const refreshDevices = useCallback(async () => {
@@ -129,11 +141,11 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const leave = useCallback(async () => {
     if (!joined && !local.current) return;
     roomTone("leave");
-    setJoined(false);joinedRef.current=false; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;
+    setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;
     peers.current.forEach((pc) => pc.close()); peers.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
     try { await post(channel, { action: "leave" }); } catch {}
   }, [channel, joined]);
-  useEffect(() => () => { alive.current = false; local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); if(joinedRef.current)void post(channel, { action: "leave" }); }, [channel]);
+  useEffect(() => () => { alive.current = false;captureCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); if(joinedRef.current)void post(channel, { action: "leave" }); }, [channel]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[]);
   useEffect(() => { if (localVideo.current) localVideo.current.srcObject = sharing&&screenTrack.current?new MediaStream([screenTrack.current]):local.current; }, [camera, sharing, joined]);
   useEffect(() => {
@@ -192,16 +204,17 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       const size=streamQuality==="1440"?{width:2560,height:1440}:{width:1920,height:1080};
       setCaptureWarning("");
       const displayOptions={video:{width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:streamFps,max:streamFps},displaySurface:"monitor"},audio:true,selfBrowserSurface:"exclude",surfaceSwitching:"include",systemAudio:"include"} as DisplayMediaStreamOptions;
-      const media=await navigator.mediaDevices.getDisplayMedia(displayOptions),track=media.getVideoTracks()[0],surface=String(track.getSettings().displaySurface||"");
+      const media=await navigator.mediaDevices.getDisplayMedia(displayOptions),sourceTrack=media.getVideoTracks()[0],surface=String(sourceTrack.getSettings().displaySurface||"");
       if(surface&&surface!=="monitor"&&!allowWindowCapture){media.getTracks().forEach((t)=>t.stop());setError("Focus-safe mode blocked window capture because games can turn black when they lose focus. Start sharing again and choose Entire Screen, or enable window capture in Voice Settings.");return;}
       if(surface&&surface!=="monitor")setCaptureWarning("Window capture is active. A hardware-accelerated game may turn black whenever Aemeath has focus. Use Borderless Windowed mode or share Entire Screen.");
-      track.contentHint="motion";await track.applyConstraints({width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:streamFps,max:streamFps}}).catch(()=>{});screenTrack.current=track;
-      const restore=async()=>{if(screenTrack.current!==track)return;roomTone("stream-stop");screenTrack.current=null;stopSharingRef.current=null;local.current?.removeTrack(track);setSharing(false);setStreamMenu(false);setTheaterStream("");await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:false})));const camera=cameraTrack.current;await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(sender)await sender.replaceTrack(camera&&camera.readyState==="live"?camera:null)}));track.stop();setLocalPreview();};
+      await sourceTrack.applyConstraints({width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:streamFps,max:streamFps}}).catch(()=>{});
+      const stabilized=await stableCapture(media,streamFps,size.width,size.height),track=stabilized.track;captureCleanup.current=()=>{stabilized.stop();media.getTracks().forEach((t)=>t.stop())};screenTrack.current=track;
+      const restore=async()=>{if(screenTrack.current!==track)return;roomTone("stream-stop");screenTrack.current=null;stopSharingRef.current=null;captureCleanup.current?.();captureCleanup.current=null;local.current?.removeTrack(track);setSharing(false);setStreamMenu(false);setTheaterStream("");await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:false})));const camera=cameraTrack.current;await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(sender)await sender.replaceTrack(camera&&camera.readyState==="live"?camera:null)}));track.stop();setLocalPreview();};
       stopSharingRef.current=restore;
-      track.addEventListener("ended",()=>{void restore()},{once:true});
+      sourceTrack.addEventListener("ended",()=>{void restore()},{once:true});
       const senders=[...peers.current.values()].map((pc)=>pc.getSenders().find((s)=>s.track?.kind==="video"));
       local.current.addTrack(track);let added=false;
-      await Promise.all([...peers.current.values()].map(async(pc)=>{let sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{sender=pc.addTrack(track,media);added=true;}await tuneVideoSender(sender,streamFps,streamQuality)}));
+      const stableStream=new MediaStream([track]);await Promise.all([...peers.current.values()].map(async(pc)=>{let sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{sender=pc.addTrack(track,stableStream);added=true;}await tuneVideoSender(sender,streamFps,streamQuality)}));
       setSharing(true);roomTone("stream-start");setLocalPreview(media);await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true})));if(added)await renegotiate();
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
