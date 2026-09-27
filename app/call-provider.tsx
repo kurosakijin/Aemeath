@@ -31,6 +31,8 @@ type Call = {
   answer: string | null;
   reason?: string;
 };
+const highQualityCamera=(facingMode:"user"|"environment"="user"):MediaTrackConstraints=>({facingMode:{ideal:facingMode},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:60}});
+async function tuneCallCamera(sender:RTCRtpSender|undefined){if(!sender)return;try{const parameters=sender.getParameters();parameters.encodings=parameters.encodings?.length?parameters.encodings:[{}];const encoding=parameters.encodings[0];encoding.maxBitrate=6_000_000;encoding.maxFramerate=30;encoding.scaleResolutionDownBy=1;(parameters as RTCRtpSendParameters&{degradationPreference?:string}).degradationPreference="maintain-resolution";await sender.setParameters(parameters)}catch{/* Mobile WebViews may select their own camera bitrate. */}}
 type View = {
   id: string;
   name: string;
@@ -179,13 +181,14 @@ export function CallProvider({
     if (!pc || !current) return;
     const nextFacing = facing.current === "user" ? "environment" : "user";
     const media = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { exact: nextFacing } },
+      video: highQualityCamera(nextFacing),
       audio: false,
     });
     const next = media.getVideoTracks()[0],
       previous = current.getVideoTracks()[0];
     const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-    if (sender) await sender.replaceTrack(next);
+    next.contentHint="motion";
+    if (sender) {await sender.replaceTrack(next);await tuneCallCamera(sender)}
     else pc.addTrack(next, current);
     if (previous) {
       current.removeTrack(previous);
@@ -201,12 +204,12 @@ export function CallProvider({
       current = stream.current;
     if (!v || !pc || !current || v.kind !== "voice") return;
     const media = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user" },
+      video: highQualityCamera(),
       audio: false,
     });
     const track = media.getVideoTracks()[0];
     current.addTrack(track);
-    pc.addTrack(track, current);
+    track.contentHint="motion";const sender=pc.addTrack(track, current);await tuneCallCamera(sender);
     setLocalStream(new MediaStream(current.getTracks()));
     show({ ...v, kind: "video", status: "Adding video…" });
     await pc.setLocalDescription(await pc.createOffer());
@@ -240,9 +243,7 @@ export function CallProvider({
       video:
         kind === "video"
           ? {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              facingMode: "user",
+              ...highQualityCamera(),
             }
           : false,
     });
@@ -254,7 +255,7 @@ export function CallProvider({
     setLocalStream(media);
     const pc = new RTCPeerConnection({ iceServers: config.iceServers });
     peer.current = pc;
-    media.getTracks().forEach((t) => pc.addTrack(t, media));
+    media.getTracks().forEach((t) => {if(t.kind==="video")t.contentHint="motion";const sender=pc.addTrack(t, media);if(t.kind==="video")void tuneCallCamera(sender)});
     pc.ontrack = (e) => {
       if (version === generation.current)
         setRemoteStream(e.streams[0] || new MediaStream([e.track]));
@@ -399,12 +400,12 @@ export function CallProvider({
           if (c.status === "upgrading" && c.callee === user.id && pc) {
             await pc.setRemoteDescription(JSON.parse(c.offer));
             const camera = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: "user" },
+              video: highQualityCamera(),
               audio: false,
             });
             const track = camera.getVideoTracks()[0];
             stream.current?.addTrack(track);
-            pc.addTrack(track, stream.current!);
+            track.contentHint="motion";const sender=pc.addTrack(track, stream.current!);await tuneCallCamera(sender);
             setLocalStream(new MediaStream(stream.current!.getTracks()));
             await pc.setLocalDescription(await pc.createAnswer());
             await request("/api/calls", {

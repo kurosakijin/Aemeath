@@ -10,6 +10,17 @@ type StreamQuality = "1080" | "1440";
 type PeerSlots = { audio:RTCRtpSender; camera:RTCRtpSender; screen:RTCRtpSender };
 function mediaPermissionDenied(error:unknown){const value=error as {name?:string;message?:string};return ["NotAllowedError","PermissionDeniedError","SecurityError"].includes(value?.name||"")||/permission|denied|not allowed|blocked/i.test(value?.message||String(error))}
 
+const cameraConstraints=(deviceId:string):MediaTrackConstraints=>({
+  deviceId:deviceId==="default"?undefined:{exact:deviceId},
+  facingMode:deviceId==="default"?{ideal:"user"}:undefined,
+  width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:60},
+});
+
+async function tuneCameraSender(sender:RTCRtpSender|undefined){
+  if(!sender)return;
+  try{const parameters=sender.getParameters();parameters.encodings=parameters.encodings?.length?parameters.encodings:[{}];const encoding=parameters.encodings[0] as RTCRtpEncodingParameters&{networkPriority?:string;priority?:string};encoding.maxBitrate=6_000_000;encoding.maxFramerate=30;encoding.scaleResolutionDownBy=1;encoding.networkPriority="high";encoding.priority="high";(parameters as RTCRtpSendParameters&{degradationPreference?:string}).degradationPreference="maintain-resolution";await sender.setParameters(parameters)}catch{/* The browser may manage camera encoding itself. */}
+}
+
 async function tuneVideoSender(sender: RTCRtpSender | undefined, fps: number, quality: StreamQuality) {
   if (!sender) return;
   try {
@@ -112,7 +123,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     const slots={audio:pc.addTransceiver("audio",{direction:"sendrecv"}).sender,camera:pc.addTransceiver("video",{direction:"sendrecv"}).sender,screen:pc.addTransceiver("video",{direction:"sendrecv"}).sender};peerSlots.current.set(person.id,slots);
     const activeAudio=screenAudioTrack.current||microphoneTrack.current;
     if(activeAudio)void slots.audio.replaceTrack(activeAudio);
-    if(cameraTrack.current)void slots.camera.replaceTrack(cameraTrack.current);
+    if(cameraTrack.current){void slots.camera.replaceTrack(cameraTrack.current);void tuneCameraSender(slots.camera)}
     if(screenTrack.current){void slots.screen.replaceTrack(screenTrack.current);void tuneVideoSender(slots.screen,streamFps,streamQuality)}
     pc.onicecandidate = (event) => { if (event.candidate) void signal(person.id, { type: "candidate", candidate: event.candidate }); };
     pc.ontrack = (event) => {
@@ -210,13 +221,13 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     if (!local.current) return;
     const old = cameraTrack.current;
     if (old) { old.stop(); local.current.removeTrack(old);cameraTrack.current=null;await Promise.all([...peerSlots.current.values()].map(slot=>slot.camera.replaceTrack(null)));await restoreMicrophoneAfterVideo();await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:sharing})));setCamera(false); return; }
-    try { const media = await navigator.mediaDevices.getUserMedia({ video: { deviceId: cameraId === "default" ? undefined : { exact: cameraId }, facingMode: cameraId === "default" ? "user" : undefined, width: { ideal: 1280 }, height: { ideal: 720 } } }); const track = media.getVideoTracks()[0]; cameraTrack.current=track; local.current.addTrack(track);await Promise.all([...peerSlots.current.values()].map(slot=>slot.camera.replaceTrack(track))); setCamera(true); await refreshDevices();await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true}))); } catch (e) { setError((e as Error).message); }
+    try { const media = await navigator.mediaDevices.getUserMedia({ video: cameraConstraints(cameraId) }); const track = media.getVideoTracks()[0];track.contentHint="motion";cameraTrack.current=track; local.current.addTrack(track);await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.camera.replaceTrack(track);await tuneCameraSender(slot.camera)})); setCamera(true); await refreshDevices();await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true}))); } catch (e) { setError((e as Error).message); }
   }
   async function changeMicrophone(id: string) {
     setMicId(id); if (!local.current) return;
     try { const media=await navigator.mediaDevices.getUserMedia({audio:{deviceId:id==="default"?undefined:{exact:id},echoCancellation,noiseSuppression},video:false}), next=media.getAudioTracks()[0], old=microphoneTrack.current; if(old)local.current.removeTrack(old); old?.stop();microphoneTrack.current=next; local.current.addTrack(next); await Promise.all([...peerSlots.current.values()].map(slot=>slot.audio.replaceTrack(next))); } catch(e){setError(mediaPermissionDenied(e)?"Microphone access is blocked by this browser.":(e as Error).message);}
   }
-  async function changeCamera(id: string) { setCameraId(id); if (!camera || !local.current) return; const old=cameraTrack.current; try { const media=await navigator.mediaDevices.getUserMedia({video:{deviceId:id==="default"?undefined:{exact:id},facingMode:id==="default"?"user":undefined,width:{ideal:1280},height:{ideal:720}},audio:false}), next=media.getVideoTracks()[0]; cameraTrack.current=next;if(old)local.current.removeTrack(old);old?.stop();local.current.addTrack(next);await Promise.all([...peerSlots.current.values()].map(slot=>slot.camera.replaceTrack(next)));setCamera(true); } catch(e){setError((e as Error).message);}}
+  async function changeCamera(id: string) { setCameraId(id); if (!camera || !local.current) return; const old=cameraTrack.current; try { const media=await navigator.mediaDevices.getUserMedia({video:cameraConstraints(id),audio:false}), next=media.getVideoTracks()[0];next.contentHint="motion";cameraTrack.current=next;if(old)local.current.removeTrack(old);old?.stop();local.current.addTrack(next);await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.camera.replaceTrack(next);await tuneCameraSender(slot.camera)}));setCamera(true); } catch(e){setError((e as Error).message);}}
   async function shareScreen() {
     if (!local.current || screenTrack.current) return;
     try {
