@@ -344,7 +344,7 @@ export default function Hearth({
     <SidebarProvider>
       <div className="hearth-app">
         <nav className="server-rail" aria-label="Servers">
-          <div className="brand-icon" title="Hearth">
+          <div className="brand-icon" title="Aemeath">
             <Flame size={27} />
           </div>
           <div className="rail-line" />
@@ -618,7 +618,7 @@ export default function Hearth({
                   </span>
                   <div>
                     <strong>
-                      Welcome to Hearth <span className="tag">YOUR SPACE</span>
+                      Welcome to Aemeath <span className="tag">YOUR SPACE</span>
                     </strong>
                     <p>
                       Start with a server. Add a few channels. Invite your
@@ -919,7 +919,7 @@ export default function Hearth({
                       {copied ? "Copied" : "Copy invitation"}
                     </button>
                     <p className="muted-text">
-                      Friends need a Hearth account and access to this private
+                      Friends need a Aemeath account and access to this private
                       site before joining.
                     </p>
                   </>

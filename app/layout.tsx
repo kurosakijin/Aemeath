@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Hearth — Your people. Your place.",
+  title: "Aemeath — Your people. Your place.",
   description: "Private servers and conversations for you and your friends.",
   other: {
     "codex-preview": "development",

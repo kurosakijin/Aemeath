@@ -288,7 +288,7 @@ function Inbox({
     <SidebarProvider>
       <div className="hearth-app dm-app">
         <nav className="server-rail" aria-label="Home and servers">
-          <div className="brand-icon" title="Hearth">
+          <div className="brand-icon" title="Aemeath">
             <Flame size={27} />
           </div>
           <div className="rail-line" />
@@ -611,7 +611,7 @@ function Inbox({
         <DialogContent className="hearth-dialog">
           <DialogTitle>Start a conversation</DialogTitle>
           <DialogDescription>
-            Find someone by their exact Hearth username.
+            Find someone by their exact Aemeath username.
           </DialogDescription>
           <label className="form-label" htmlFor="find-username">
             Username
@@ -655,7 +655,7 @@ function Inbox({
             </p>
           )}
           <p className="muted-text">
-            Your friend needs a Hearth account and access to this private site.
+            Your friend needs a Aemeath account and access to this private site.
           </p>
         </DialogContent>
       </Dialog>
