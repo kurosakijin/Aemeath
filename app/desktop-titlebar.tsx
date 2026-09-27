@@ -1,10 +1,11 @@
 "use client";
 import {useEffect,useState} from "react";
-import {Flame,Minus,Square,X} from "lucide-react";
+import {Flame,Minus,RefreshCw,Square,X} from "lucide-react";
 
 type DesktopBridge={
   isDesktop:boolean;
   windowAction:(action:"minimize"|"maximize"|"close")=>void;
+  checkForUpdates:()=>void;
   onWindowState:(listener:(state:{maximized:boolean})=>void)=>()=>void;
 };
 
@@ -22,6 +23,7 @@ export default function DesktopTitlebar(){
     <div className="desktop-titlebar-brand"><span><Flame size={15}/></span><strong>Aemeath</strong><i>DESKTOP</i></div>
     <div className="desktop-titlebar-drag" aria-hidden><b>Private conversations, closer together</b></div>
     <nav aria-label="Window controls">
+      <button aria-label="Check for updates" title="Check for updates" onClick={()=>bridge.checkForUpdates()}><RefreshCw/></button>
       <button aria-label="Minimize" onClick={()=>bridge.windowAction("minimize")}><Minus/></button>
       <button aria-label={maximized?"Restore window":"Maximize"} onClick={()=>bridge.windowAction("maximize")}><Square/></button>
       <button className="desktop-window-close" aria-label="Close" onClick={()=>bridge.windowAction("close")}><X/></button>

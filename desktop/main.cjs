@@ -1,11 +1,12 @@
-const { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, ipcMain, session, shell } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const path = require("node:path");
 const log = require("electron-log/main");
 log.initialize();
 
 const APP_URL = process.env.AEMEATH_APP_URL || "https://aemeath-tau.vercel.app/";
 const APP_ORIGIN = new URL(APP_URL).origin;
-let mainWindow;
+let mainWindow, tray, quitting = false;
 
 function trusted(url) {
   try { return new URL(url).origin === APP_ORIGIN; } catch { return false; }
@@ -77,6 +78,7 @@ function createWindow() {
   const sendState=()=>mainWindow?.webContents.send("aemeath:window-state",{maximized:mainWindow.isMaximized()});
   mainWindow.on("maximize",sendState);
   mainWindow.on("unmaximize",sendState);
+  mainWindow.on("close",event=>{if(!quitting){event.preventDefault();mainWindow.hide();tray?.displayBalloon?.({title:"Aemeath is still running",content:"Calls and notifications remain available in the system tray."})}});
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (trusted(url)) return { action: "allow" };
     void shell.openExternal(url);
@@ -88,20 +90,45 @@ function createWindow() {
   void mainWindow.loadURL(APP_URL);
 }
 
+function showWindow(){if(!mainWindow)return;if(mainWindow.isMinimized())mainWindow.restore();mainWindow.show();mainWindow.focus()}
+function createTray(){
+  tray=new Tray(path.join(__dirname,"assets","icon.ico"));tray.setToolTip("Aemeath");
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {label:"Open Aemeath",click:showWindow},
+    {label:"Check for updates",click:()=>void checkForUpdates(true)},
+    {type:"separator"},
+    {label:"Quit Aemeath",click:()=>{quitting=true;app.quit()}},
+  ]));
+  tray.on("click",showWindow);
+}
+
+async function checkForUpdates(manual=false){
+  if(!app.isPackaged){if(manual)void dialog.showMessageBox(mainWindow,{type:"info",title:"Aemeath updates",message:"Update checks are available in the installed app."});return}
+  try{const result=await autoUpdater.checkForUpdates();if(manual&&result?.updateInfo?.version===app.getVersion())void dialog.showMessageBox(mainWindow,{type:"info",title:"Aemeath is up to date",message:"You already have the latest version."})}
+  catch(error){log.error("Update check failed",error);if(manual)void dialog.showMessageBox(mainWindow,{type:"error",title:"Could not check for updates",message:"Aemeath could not reach the update service. Try again later."})}
+}
+
+autoUpdater.autoDownload=true;
+autoUpdater.autoInstallOnAppQuit=true;
+autoUpdater.on("update-downloaded",async info=>{const answer=await dialog.showMessageBox(mainWindow,{type:"info",title:"Aemeath update ready",message:`Aemeath ${info.version} is ready to install.`,detail:"Restart Aemeath now to finish the update.",buttons:["Restart and install","Later"],defaultId:0,cancelId:1});if(answer.response===0){quitting=true;autoUpdater.quitAndInstall(false,true)}});
+autoUpdater.on("error",error=>log.error("Auto updater",error));
+
 ipcMain.on("aemeath:window",(event,action)=>{
   if(!mainWindow||event.sender!==mainWindow.webContents)return;
   if(action==="minimize")mainWindow.minimize();
   else if(action==="maximize")mainWindow.isMaximized()?mainWindow.unmaximize():mainWindow.maximize();
   else if(action==="close")mainWindow.close();
 });
+ipcMain.on("aemeath:check-update",event=>{if(mainWindow&&event.sender===mainWindow.webContents)void checkForUpdates(true)});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 else {
   app.on("second-instance", () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); } });
-  app.whenReady().then(() => { configureMediaPermissions(); createWindow(); });
+  app.whenReady().then(() => { configureMediaPermissions(); createWindow();createTray();setTimeout(()=>void checkForUpdates(false),5000); });
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
-  app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+  app.on("before-quit",()=>{quitting=true});
+  app.on("window-all-closed", () => { if (process.platform !== "darwin"&&quitting) app.quit(); });
 }
 
 Menu.setApplicationMenu(null);

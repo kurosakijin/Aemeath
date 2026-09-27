@@ -1,6 +1,6 @@
 {
   "name": "aemeath",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -84,6 +84,13 @@
   "main": "desktop/main.cjs",
   "build": {
     "appId": "app.aemeath.desktop",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kurosakijin",
+        "repo": "Aemeath"
+      }
+    ],
     "productName": "Aemeath",
     "asar": true,
     "directories": {
@@ -98,7 +105,7 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "Aemeath-Setup-${version}.${ext}"
+      "artifactName": "Aemeath-Windows.${ext}"
     },
     "nsis": {
       "createDesktopShortcut": true,

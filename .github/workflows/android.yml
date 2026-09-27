@@ -28,6 +28,16 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: aemeath-android-signing-v1
+      - name: Prepare persistent Android signing key
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Aemeath,OU=Mobile,O=Aemeath,L=Internet,ST=Online,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - run: npm ci
       - run: npm run android:sync
       - name: Build debug APK

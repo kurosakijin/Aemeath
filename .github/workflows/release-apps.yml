@@ -27,12 +27,13 @@ jobs:
             Write-Output "::error::$message"
             exit $LASTEXITCODE
           }
-      - shell: pwsh
-        run: Copy-Item release/Aemeath-Setup-*.exe release/Aemeath-Windows.exe
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: release/Aemeath-Windows.exe
+          path: |
+            release/Aemeath-Windows.exe
+            release/Aemeath-Windows.exe.blockmap
+            release/latest.yml
 
   android:
     runs-on: ubuntu-latest
@@ -47,6 +48,16 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: aemeath-android-signing-v1
+      - name: Prepare persistent Android signing key
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Aemeath,OU=Mobile,O=Aemeath,L=Internet,ST=Online,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - run: npm ci
       - run: npm run android:sync
       - working-directory: android
@@ -68,4 +79,4 @@ jobs:
       - name: Publish installers
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" apps/Aemeath-Windows.exe apps/Aemeath-Android.apk --repo "$GITHUB_REPOSITORY" --title "Aemeath $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" apps/Aemeath-Windows.exe apps/Aemeath-Windows.exe.blockmap apps/latest.yml apps/Aemeath-Android.apk --repo "$GITHUB_REPOSITORY" --title "Aemeath $GITHUB_REF_NAME" --generate-notes
