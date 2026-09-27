@@ -428,15 +428,6 @@ export default function Hearth({
               <div/>
               <button onClick={()=>{void navigator.clipboard.writeText(server.id);setServerMenu(false)}}><Copy size={17}/> Copy server ID</button>
             </div>}
-            <div className="server-intro">
-              <span className="eyebrow">A LITTLE CLOSER</span>
-              <h2>
-                Good company.
-                <br />
-                Your own corner.
-              </h2>
-              <span>Make yourself at home.</span>
-            </div>
             {server && owner && (
               <button className="invite-row" onClick={invite}>
                 <UserPlus size={16} /> Invite your people
