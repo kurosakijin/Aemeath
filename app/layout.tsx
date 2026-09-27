@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import DesktopTitlebar from "./desktop-titlebar";
 
 export const metadata: Metadata = {
   title: "Aemeath — Your people. Your place.",
@@ -20,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased"><DesktopTitlebar/>{children}</body>
     </html>
   );
 }

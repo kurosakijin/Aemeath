@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, desktopCapturer, dialog, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, session, shell } = require("electron");
 const path = require("node:path");
 const log = require("electron-log/main");
 log.initialize();
@@ -59,6 +59,10 @@ function createWindow() {
     minWidth: 920,
     minHeight: 620,
     backgroundColor: "#18191d",
+    frame: false,
+    titleBarStyle: "hidden",
+    roundedCorners: true,
+    show: false,
     autoHideMenuBar: true,
     icon: path.join(__dirname, "assets", "icon.png"),
     webPreferences: {
@@ -69,6 +73,10 @@ function createWindow() {
       spellcheck: true,
     },
   });
+  mainWindow.once("ready-to-show",()=>mainWindow.show());
+  const sendState=()=>mainWindow?.webContents.send("aemeath:window-state",{maximized:mainWindow.isMaximized()});
+  mainWindow.on("maximize",sendState);
+  mainWindow.on("unmaximize",sendState);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (trusted(url)) return { action: "allow" };
     void shell.openExternal(url);
@@ -79,6 +87,13 @@ function createWindow() {
   });
   void mainWindow.loadURL(APP_URL);
 }
+
+ipcMain.on("aemeath:window",(event,action)=>{
+  if(!mainWindow||event.sender!==mainWindow.webContents)return;
+  if(action==="minimize")mainWindow.minimize();
+  else if(action==="maximize")mainWindow.isMaximized()?mainWindow.unmaximize():mainWindow.maximize();
+  else if(action==="close")mainWindow.close();
+});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();

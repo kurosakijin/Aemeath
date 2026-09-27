@@ -111,6 +111,18 @@ svg {
   display: flex;
   overflow: hidden;
 }
+
+/* Native desktop chrome */
+.desktop-titlebar{display:none}
+html.desktop-app{background:#101114}
+html.desktop-app body{height:100dvh;overflow:hidden;padding-top:36px;background:#101114}
+html.desktop-app .desktop-titlebar{position:fixed;z-index:20000;inset:0 0 auto;height:36px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;background:linear-gradient(90deg,#111216,#19151a 55%,#111216);border-bottom:1px solid #ffffff0c;color:#d9d8de;box-shadow:0 1px 0 #0008;-webkit-app-region:drag;user-select:none}
+.desktop-titlebar-brand{height:100%;display:flex;align-items:center;gap:8px;padding:0 13px;font-size:12px;letter-spacing:.01em}.desktop-titlebar-brand>span{width:23px;height:23px;display:grid;place-items:center;border-radius:8px;background:linear-gradient(145deg,#ff69ad,#c72b76);color:white;box-shadow:0 4px 13px #ff45933d}.desktop-titlebar-brand strong{font-weight:780}.desktop-titlebar-brand i{padding:2px 5px;border-radius:4px;background:#ffffff0b;color:#77747d;font-size:8px;font-style:normal;font-weight:800;letter-spacing:.1em}.desktop-titlebar-drag{display:grid;place-items:center;height:100%;pointer-events:none}.desktop-titlebar-drag b{color:#66636b;font-size:9px;font-weight:650;letter-spacing:.04em}.desktop-titlebar nav{height:100%;display:flex;-webkit-app-region:no-drag}.desktop-titlebar nav button{width:47px;height:100%;display:grid;place-items:center;background:transparent;color:#8e8c94;cursor:pointer;transition:background .14s,color .14s}.desktop-titlebar nav button:hover{background:#ffffff0b;color:#fff}.desktop-titlebar nav button.desktop-window-close:hover{background:#d93656;color:#fff}.desktop-titlebar nav svg{width:14px;height:14px;stroke-width:1.8}
+html.desktop-app .aemeath-app,html.desktop-app .auth-page,html.desktop-app .account-loading,html.desktop-app .server-settings-page{height:calc(100dvh - 36px);min-height:calc(100dvh - 36px)}
+html.desktop-app .server-rail{background:linear-gradient(180deg,#121318,#17151a);border-right:1px solid #ffffff08}
+html.desktop-app .channel-sidebar{border-right:1px solid #ffffff08}
+html.desktop-app .chat-header,html.desktop-app .server-title{box-shadow:0 1px 0 #ffffff08}
+html.desktop-app .signed-in-downloads{display:none}
 .server-rail {
   width: 76px;
   flex-shrink: 0;
