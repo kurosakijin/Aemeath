@@ -6,6 +6,22 @@ type Person = { id: string; name: string };
 type Signal = { id: string; from: string; body: string; created: number };
 type Remote = Person & { stream: MediaStream };
 type DeviceOption = { deviceId: string; label: string };
+type StreamQuality = "1080" | "1440";
+
+async function tuneVideoSender(sender: RTCRtpSender | undefined, fps: number, quality: StreamQuality) {
+  if (!sender) return;
+  try {
+    const parameters=sender.getParameters();
+    parameters.encodings=parameters.encodings?.length?parameters.encodings:[{}];
+    const encoding=parameters.encodings[0] as RTCRtpEncodingParameters & {maxFramerate?:number;networkPriority?:string;priority?:string};
+    encoding.maxBitrate=quality==="1440"?20_000_000:12_000_000;
+    encoding.maxFramerate=fps;
+    encoding.scaleResolutionDownBy=1;
+    encoding.networkPriority="high";encoding.priority="high";
+    (parameters as RTCRtpSendParameters & {degradationPreference?:string}).degradationPreference="maintain-framerate";
+    await sender.setParameters(parameters);
+  } catch { /* Some mobile browsers manage sender quality automatically. */ }
+}
 
 let roomAudio: AudioContext | null = null;
 function roomTone(kind: "join" | "leave") {
@@ -53,7 +69,8 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     [cameraId, setCameraId] = useState("default"), [speakerId, setSpeakerId] = useState("default"),
     [echoCancellation, setEchoCancellation] = useState(true), [noiseSuppression, setNoiseSuppression] = useState(true),
     [sensitivity, setSensitivity] = useState(55), [remoteSharing, setRemoteSharing] = useState<Set<string>>(new Set()),
-    [theaterStream, setTheaterStream] = useState("");
+    [theaterStream, setTheaterStream] = useState(""), [streamFps,setStreamFps]=useState(60),
+    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080");
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), names = useRef(new Map<string, string>()),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
@@ -76,7 +93,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     const pc = new RTCPeerConnection({ iceServers: ice.current }); peers.current.set(person.id, pc);
     local.current?.getAudioTracks().forEach((track) => pc.addTrack(track, local.current!));
     const activeVideo=screenTrack.current||cameraTrack.current;
-    if(activeVideo)pc.addTrack(activeVideo,new MediaStream([activeVideo]));
+    if(activeVideo){const sender=pc.addTrack(activeVideo,new MediaStream([activeVideo]));if(screenTrack.current)void tuneVideoSender(sender,streamFps,streamQuality)}
     pc.onicecandidate = (event) => { if (event.candidate) void signal(person.id, { type: "candidate", candidate: event.candidate }); };
     pc.ontrack = (event) => {
       const stream = event.streams[0] || new MediaStream([event.track]);
@@ -84,7 +101,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     };
     pc.onconnectionstatechange = () => { if (["failed", "closed"].includes(pc.connectionState)) closePeer(person.id); };
     return pc;
-  }, [closePeer, signal]);
+  }, [closePeer, signal, streamFps, streamQuality]);
   const offer = useCallback(async (person: Person) => {
     const pc = makePeer(person); if (pc.signalingState !== "stable") return;
     await pc.setLocalDescription(await pc.createOffer());
@@ -166,12 +183,14 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   async function shareScreen() {
     if (!local.current || sharing) return;
     try {
-      const media=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30,max:60}},audio:true}),track=media.getVideoTracks()[0];screenTrack.current=track;
+      const size=streamQuality==="1440"?{width:2560,height:1440}:{width:1920,height:1080};
+      const media=await navigator.mediaDevices.getDisplayMedia({video:{width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:streamFps,max:streamFps}},audio:true}),track=media.getVideoTracks()[0];
+      track.contentHint="motion";await track.applyConstraints({width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:streamFps,max:streamFps}}).catch(()=>{});screenTrack.current=track;
       const restore=async()=>{if(screenTrack.current!==track)return;screenTrack.current=null;local.current?.removeTrack(track);setSharing(false);setTheaterStream("");await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:false})));const camera=cameraTrack.current;await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(sender)await sender.replaceTrack(camera&&camera.readyState==="live"?camera:null)}));track.stop();setLocalPreview();};
       track.addEventListener("ended",()=>{void restore()},{once:true});
       const senders=[...peers.current.values()].map((pc)=>pc.getSenders().find((s)=>s.track?.kind==="video"));
       local.current.addTrack(track);let added=false;
-      await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{pc.addTrack(track,media);added=true;}}));
+      await Promise.all([...peers.current.values()].map(async(pc)=>{let sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{sender=pc.addTrack(track,media);added=true;}await tuneVideoSender(sender,streamFps,streamQuality)}));
       setSharing(true);setLocalPreview(media);await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true})));if(added)await renegotiate();
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
@@ -188,7 +207,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       </div>
       <div className="voice-status"><Users size={15}/> {members.length} connected</div>
       <div className="voice-controls"><button className={muted ? "off" : ""} aria-label={muted ? "Unmute" : "Mute"} onClick={() => { const next=!muted; local.current?.getAudioTracks().forEach((t)=>t.enabled=!next); setMuted(next); }}>{muted?<MicOff/>:<Mic/>}</button><button className={camera ? "active" : ""} aria-label="Toggle camera" onClick={toggleCamera}>{camera?<Camera/>:<CameraOff/>}</button><button className={sharing ? "active" : ""} aria-label="Share gameplay or screen" onClick={shareScreen}><MonitorUp/></button><button className={settings ? "active" : ""} aria-label="Voice settings" onClick={()=>{setSettings(!settings);void refreshDevices();}}><Settings/></button><button className="hangup" aria-label="Leave voice" onClick={leave}><PhoneOff/></button></div>
-      {settings && <aside className="voice-settings"><header><div><strong>Voice & video</strong><small>Choose how you join the room</small></div><button aria-label="Close voice settings" onClick={()=>setSettings(false)}><X size={18}/></button></header><label>Input device<select value={micId} onChange={(e)=>void changeMicrophone(e.target.value)}><option value="default">System default</option>{microphones.map((d)=><option value={d.deviceId} key={d.deviceId}>{d.label}</option>)}</select></label><label>Output device<select value={speakerId} onChange={(e)=>setSpeakerId(e.target.value)}><option value="default">System default</option>{speakers.map((d)=><option value={d.deviceId} key={d.deviceId}>{d.label}</option>)}</select></label><label>Camera<select value={cameraId} onChange={(e)=>void changeCamera(e.target.value)}><option value="default">System default</option>{cameras.map((d)=><option value={d.deviceId} key={d.deviceId}>{d.label}</option>)}</select></label><label className="voice-range">Input sensitivity <span>{sensitivity}%</span><input type="range" min="0" max="100" value={sensitivity} onChange={(e)=>setSensitivity(Number(e.target.value))}/></label><label className="voice-switch"><span><strong>Echo cancellation</strong><small>Reduce sound coming back through your microphone.</small></span><input type="checkbox" checked={echoCancellation} onChange={(e)=>setEchoCancellation(e.target.checked)}/></label><label className="voice-switch"><span><strong>Noise suppression</strong><small>Reduce fans, keyboards, and background noise.</small></span><input type="checkbox" checked={noiseSuppression} onChange={(e)=>setNoiseSuppression(e.target.checked)}/></label><p className="voice-settings-note">Device names appear after microphone or camera permission is allowed.</p></aside>}
+      {settings && <aside className="voice-settings"><header><div><strong>Voice, video & stream</strong><small>Choose how you join the room</small></div><button aria-label="Close voice settings" onClick={()=>setSettings(false)}><X size={18}/></button></header><label>Input device<select value={micId} onChange={(e)=>void changeMicrophone(e.target.value)}><option value="default">System default</option>{microphones.map((d)=><option value={d.deviceId} key={d.deviceId}>{d.label}</option>)}</select></label><label>Output device<select value={speakerId} onChange={(e)=>setSpeakerId(e.target.value)}><option value="default">System default</option>{speakers.map((d)=><option value={d.deviceId} key={d.deviceId}>{d.label}</option>)}</select></label><label>Camera<select value={cameraId} onChange={(e)=>void changeCamera(e.target.value)}><option value="default">System default</option>{cameras.map((d)=><option value={d.deviceId} key={d.deviceId}>{d.label}</option>)}</select></label><div className="voice-stream-options"><label>Stream quality<select value={streamQuality} disabled={sharing} onChange={(e)=>setStreamQuality(e.target.value as StreamQuality)}><option value="1080">1080p · Smooth</option><option value="1440">1440p · High quality</option></select></label><label>Frame rate<select value={streamFps} disabled={sharing} onChange={(e)=>setStreamFps(Number(e.target.value))}><option value="60">60 FPS</option><option value="120">120 FPS</option></select></label></div><label className="voice-range">Input sensitivity <span>{sensitivity}%</span><input type="range" min="0" max="100" value={sensitivity} onChange={(e)=>setSensitivity(Number(e.target.value))}/></label><label className="voice-switch"><span><strong>Echo cancellation</strong><small>Reduce sound coming back through your microphone.</small></span><input type="checkbox" checked={echoCancellation} onChange={(e)=>setEchoCancellation(e.target.checked)}/></label><label className="voice-switch"><span><strong>Noise suppression</strong><small>Reduce fans, keyboards, and background noise.</small></span><input type="checkbox" checked={noiseSuppression} onChange={(e)=>setNoiseSuppression(e.target.checked)}/></label><p className="voice-settings-note">120 FPS depends on the shared display, browser, device encoder, and connection. Settings lock while a stream is live.</p></aside>}
     </>}
     {error && <div className="voice-error" role="alert">{error}</div>}
   </section>;
