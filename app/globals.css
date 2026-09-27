@@ -1763,3 +1763,47 @@ svg {
 
 /* Aemeath pink brand finish */
 ::selection{background:#ff5ca855;color:#fff}.brand-icon,.mini-brand,.auth-lock{filter:drop-shadow(0 0 12px #ff5ca844)}.primary,.auth-submit,.voice-join{background:linear-gradient(135deg,#ff7abb,#f34798)!important;color:#25131d!important;box-shadow:0 8px 24px #ff4fa62e}.server-icon.active{background:linear-gradient(145deg,#ff80bd,#e94a99)!important}.avatar{background:#7d365e;color:#ffd0e5}.voice-room{background:radial-gradient(circle at 50% 100%,rgba(255,72,156,.46),transparent 48%),linear-gradient(145deg,#21101d,#491631 64%,#bd337c)}
+
+/* Slim Aemeath scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #6b4058 transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #70465e, #553247) padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #f266a8, #c64183) padding-box;
+}
+*::-webkit-scrollbar-thumb:active {
+  background: #ff79b9 padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+  display: none;
+}
+.conversation,
+.sidebar-content,
+[data-slot="sidebar-content"],
+.members-panel,
+.voice-room,
+.voice-settings,
+.voice-chat-list,
+.dm-list {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
