@@ -32,8 +32,8 @@ public class MainActivity extends BridgeActivity {
         ContextCompat.registerReceiver(this,downloadReceiver,new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),ContextCompat.RECEIVER_NOT_EXPORTED);
         new android.os.Handler(getMainLooper()).postDelayed(this::checkForUpdate,4000);
     }
-    @Override protected void onDestroy(){try{unregisterReceiver(downloadReceiver);}catch(Exception ignored){}super.onDestroy();}
-    @Override protected void onResume(){super.onResume();if(updateFile!=null&&updateFile.exists())installDownloadedUpdate();}
+    @Override public void onDestroy(){try{unregisterReceiver(downloadReceiver);}catch(Exception ignored){}super.onDestroy();}
+    @Override public void onResume(){super.onResume();if(updateFile!=null&&updateFile.exists())installDownloadedUpdate();}
 
     private void checkForUpdate(){new Thread(()->{
         try{
