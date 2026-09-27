@@ -73,6 +73,7 @@ function initials(name: string) {
     .join("")
     .toUpperCase();
 }
+function messageDate(value:number|string){const timestamp=Number(value);return new Date(Number.isFinite(timestamp)&&timestamp>=0?timestamp:0)}
 function AttachmentDraft({source,name,spoiler,onSpoiler,onRemove,onReplace}:{source:string;name:string;spoiler:boolean;onSpoiler:()=>void;onRemove:()=>void;onReplace:(file:File)=>void}){return <div className="attachment-draft"><div className="attachment-tools"><button type="button" title={spoiler?"Remove spoiler":"Mark as spoiler"} onClick={onSpoiler}>{spoiler?<EyeOff size={17}/>:<Eye size={17}/>}</button><label title="Replace image"><Pencil size={16}/><input className="chat-image-input" type="file" accept="image/*" onChange={(e)=>{const file=e.target.files?.[0];e.target.value="";if(file)onReplace(file)}}/></label><button type="button" className="remove" title="Remove image" onClick={onRemove}><Trash2 size={17}/></button></div><div className={spoiler?"draft-image spoiler":"draft-image"}><img src={source} alt="Attachment preview"/></div><span>{name||"image.webp"}</span></div>}
 export default function Hearth({
   user,
@@ -683,10 +684,10 @@ export default function Hearth({
                 {messages.map((m, i) => (
                   <div key={m.id}>
                     {(i === 0 ||
-                      new Date(messages[i - 1].created).toLocaleDateString() !==
-                        new Date(m.created).toLocaleDateString()) && (
+                      messageDate(messages[i - 1].created).toLocaleDateString() !==
+                        messageDate(m.created).toLocaleDateString()) && (
                       <div className="day-divider">
-                        {new Date(m.created).toLocaleDateString(undefined, {
+                        {messageDate(m.created).toLocaleDateString(undefined, {
                           month: "long",
                           day: "numeric",
                           year: "numeric",
@@ -709,8 +710,8 @@ export default function Hearth({
                         {m.user === user?.id && (
                           <span className="tag">YOU</span>
                         )}
-                        <time dateTime={new Date(m.created).toISOString()}>
-                          {new Date(m.created).toLocaleTimeString(undefined, {
+                        <time dateTime={messageDate(m.created).toISOString()}>
+                          {messageDate(m.created).toLocaleTimeString(undefined, {
                             hour: "2-digit",
                             minute: "2-digit",
                           })}
@@ -739,7 +740,7 @@ export default function Hearth({
           {(!isVoice || voiceChat) && <div className={isVoice ? "composer-wrap voice-chat-drawer" : "composer-wrap"}>
             {isVoice && <div className="voice-chat-list">
               <div className="voice-chat-title"><MessageCircle size={17}/><strong>Channel chat</strong><button aria-label="Close channel chat" onClick={()=>setVoiceChat(false)}><X size={17}/></button></div>
-              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{new Date(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}</div><MessageMenu id={m.id} body={m.body} own={m.user===user.id||owner} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
+              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{messageDate(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}</div><MessageMenu id={m.id} body={m.body} own={m.user===user.id||owner} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
             </div>}
             {attachment&&<AttachmentDraft source={imageSource(attachment)} name={attachmentName} spoiler={attachmentSpoiler} onSpoiler={()=>setAttachmentSpoiler(!attachmentSpoiler)} onRemove={()=>{setAttachment("");setAttachmentName("");setAttachmentSpoiler(false)}} onReplace={async(file)=>{setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name)}catch(error){setError((error as Error).message)}finally{setSending(false)}}}/>}<form
               className={"composer " + (!current ? "disabled" : "")}
