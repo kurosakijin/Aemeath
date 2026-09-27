@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, CameraOff, Mic, MicOff, MonitorUp, PhoneOff, Settings, Users, X } from "lucide-react";
+import { Camera, CameraOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, Settings, Users, X } from "lucide-react";
 
 type Person = { id: string; name: string };
 type Signal = { id: string; from: string; body: string; created: number };
@@ -52,7 +52,8 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     [speakers, setSpeakers] = useState<DeviceOption[]>([]), [micId, setMicId] = useState("default"),
     [cameraId, setCameraId] = useState("default"), [speakerId, setSpeakerId] = useState("default"),
     [echoCancellation, setEchoCancellation] = useState(true), [noiseSuppression, setNoiseSuppression] = useState(true),
-    [sensitivity, setSensitivity] = useState(55);
+    [sensitivity, setSensitivity] = useState(55), [remoteSharing, setRemoteSharing] = useState<Set<string>>(new Set()),
+    [theaterStream, setTheaterStream] = useState("");
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), names = useRef(new Map<string, string>()),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
@@ -88,9 +89,12 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     const pc = makePeer(person); if (pc.signalingState !== "stable") return;
     await pc.setLocalDescription(await pc.createOffer());
     await signal(person.id, { type: "description", description: pc.localDescription });
+    if(screenTrack.current)await signal(person.id,{type:"stream-state",active:true});
   }, [makePeer, signal]);
   const handleSignal = useCallback(async (item: Signal) => {
-    const message = JSON.parse(item.body), person = { id: item.from, name: names.current.get(item.from) || "Member" }, pc = makePeer(person);
+    const message = JSON.parse(item.body), person = { id: item.from, name: names.current.get(item.from) || "Member" };
+    if(message.type==="stream-state"){setRemoteSharing((old)=>{const next=new Set(old);if(message.active)next.add(item.from);else next.delete(item.from);return next});if(!message.active)setTheaterStream((old)=>old===item.from?"":old);return;}
+    const pc = makePeer(person);
     if (message.type === "candidate") { try { await pc.addIceCandidate(message.candidate); } catch {} return; }
     if (message.type !== "description") return;
     const description = message.description as RTCSessionDescriptionInit;
@@ -105,7 +109,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     if (!joined && !local.current) return;
     roomTone("leave");
     setJoined(false); local.current?.getTracks().forEach((track) => track.stop()); local.current = null;
-    peers.current.forEach((pc) => pc.close()); peers.current.clear(); knownMembers.current = null; setRemotes([]); setCamera(false); setSharing(false);
+    peers.current.forEach((pc) => pc.close()); peers.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
     try { await post(channel, { action: "leave" }); } catch {}
   }, [channel, joined]);
   useEffect(() => () => { alive.current = false; local.current?.getTracks().forEach((t) => t.stop()); peers.current.forEach((p) => p.close()); void post(channel, { action: "leave" }); }, [channel]);
@@ -130,7 +134,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
         knownMembers.current = nextMembers; setMembers(list); list.forEach((p) => names.current.set(p.id, p.name));
         for (const item of (data.signals || []) as Signal[]) await handleSignal(item);
         for (const p of list) if (p.id !== user.id && !peers.current.has(p.id) && user.id < p.id) await offer(p);
-        for (const id of [...peers.current.keys()]) if (!list.some((p) => p.id === id)) closePeer(id);
+        for (const id of [...peers.current.keys()]) if (!list.some((p) => p.id === id)){closePeer(id);setRemoteSharing((old)=>{const next=new Set(old);next.delete(id);return next})}
       } catch (e) { if (alive.current) setError((e as Error).message || "Could not refresh the voice room."); }
     };
     void poll(); const timer = setInterval(() => { void post(channel, { action: "heartbeat" }); void poll(); }, 1500);
@@ -163,20 +167,24 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     if (!local.current || sharing) return;
     try {
       const media=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30,max:60}},audio:true}),track=media.getVideoTracks()[0];screenTrack.current=track;
-      const restore=async()=>{if(screenTrack.current!==track)return;screenTrack.current=null;local.current?.removeTrack(track);setSharing(false);const camera=cameraTrack.current;await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(sender)await sender.replaceTrack(camera&&camera.readyState==="live"?camera:null)}));track.stop();setLocalPreview();};
+      const restore=async()=>{if(screenTrack.current!==track)return;screenTrack.current=null;local.current?.removeTrack(track);setSharing(false);setTheaterStream("");await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:false})));const camera=cameraTrack.current;await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track===track||s.track?.kind==="video");if(sender)await sender.replaceTrack(camera&&camera.readyState==="live"?camera:null)}));track.stop();setLocalPreview();};
       track.addEventListener("ended",()=>{void restore()},{once:true});
       const senders=[...peers.current.values()].map((pc)=>pc.getSenders().find((s)=>s.track?.kind==="video"));
       local.current.addTrack(track);let added=false;
       await Promise.all([...peers.current.values()].map(async(pc)=>{const sender=pc.getSenders().find((s)=>s.track?.kind==="video");if(sender)await sender.replaceTrack(track);else{pc.addTrack(track,media);added=true;}}));
-      setSharing(true);setLocalPreview(media);if(added)await renegotiate();
+      setSharing(true);setLocalPreview(media);await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true})));if(added)await renegotiate();
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
   function setLocalPreview(stream:MediaStream|null=local.current){if(localVideo.current)localVideo.current.srcObject=stream}
   return <section className="voice-room">
     {!joined ? <div className="voice-empty"><div className="voice-orb"><VolumeIcon /></div><h1>{name}</h1><p>{members.length?`${members.length} ${members.length===1?"person is":"people are"} in voice`:"No one is currently in voice"}</p>{members.length>0&&<div className="voice-waiting-members">{members.map((person)=><div key={person.id}><span>{person.name.slice(0,2).toUpperCase()}</span><strong>{person.name}</strong><i>Connected</i></div>)}</div>}<button className="voice-join" disabled={busy} onClick={join}>{busy ? "Joining…" : "Join Voice"}</button></div> : <>
-      <div className="voice-grid">
-        <div className="voice-tile local"><video ref={localVideo} autoPlay muted playsInline className={camera || sharing ? "" : "hidden"}/><div className="voice-avatar">{user.name.slice(0,2).toUpperCase()}</div><span>{user.name} · You</span></div>
-        {remotes.map((remote) => <div className="voice-tile" key={remote.id}><RemoteVideo stream={remote.stream} speakerId={speakerId}/><div className="voice-avatar">{remote.name.slice(0,2).toUpperCase()}</div><span>{remote.name}</span></div>)}
+      {(sharing||remoteSharing.size>0)&&<div className={"stream-deck "+(theaterStream?"theater":"")}>
+        {sharing&&<StreamCard id={user.id} name={`${user.name}'s stream`} theater={theaterStream===user.id} onTheater={()=>setTheaterStream(theaterStream===user.id?"":user.id)}><TrackVideo track={screenTrack.current} muted/></StreamCard>}
+        {remotes.filter((r)=>remoteSharing.has(r.id)).map((remote)=><StreamCard key={remote.id} id={remote.id} name={`${remote.name}'s stream`} theater={theaterStream===remote.id} onTheater={()=>setTheaterStream(theaterStream===remote.id?"":remote.id)}><RemoteVideo stream={remote.stream} speakerId={speakerId}/></StreamCard>)}
+      </div>}
+      <div className={"voice-grid "+((sharing||remoteSharing.size)?"with-streams":"")}>
+        <div className="voice-tile local">{camera&&!sharing&&<video ref={localVideo} autoPlay muted playsInline/>}<div className="voice-avatar">{user.name.slice(0,2).toUpperCase()}</div>{sharing&&<span className="streaming-badge"><MonitorUp size={13}/> Streaming</span>}<span>{user.name} · You</span></div>
+        {remotes.map((remote) => <div className="voice-tile" key={remote.id}>{!remoteSharing.has(remote.id)&&<RemoteVideo stream={remote.stream} speakerId={speakerId}/>}<div className="voice-avatar">{remote.name.slice(0,2).toUpperCase()}</div>{remoteSharing.has(remote.id)&&<span className="streaming-badge"><MonitorUp size={13}/> Streaming</span>}<span>{remote.name}</span></div>)}
       </div>
       <div className="voice-status"><Users size={15}/> {members.length} connected</div>
       <div className="voice-controls"><button className={muted ? "off" : ""} aria-label={muted ? "Unmute" : "Mute"} onClick={() => { const next=!muted; local.current?.getAudioTracks().forEach((t)=>t.enabled=!next); setMuted(next); }}>{muted?<MicOff/>:<Mic/>}</button><button className={camera ? "active" : ""} aria-label="Toggle camera" onClick={toggleCamera}>{camera?<Camera/>:<CameraOff/>}</button><button className={sharing ? "active" : ""} aria-label="Share gameplay or screen" onClick={shareScreen}><MonitorUp/></button><button className={settings ? "active" : ""} aria-label="Voice settings" onClick={()=>{setSettings(!settings);void refreshDevices();}}><Settings/></button><button className="hangup" aria-label="Leave voice" onClick={leave}><PhoneOff/></button></div>
@@ -186,4 +194,6 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   </section>;
 }
 function RemoteVideo({ stream, speakerId }: { stream: MediaStream; speakerId: string }) { const ref=useRef<HTMLVideoElement>(null); useEffect(()=>{ if(ref.current) ref.current.srcObject=stream; const video=ref.current as (HTMLVideoElement & {setSinkId?:(id:string)=>Promise<void>})|null; if(video?.setSinkId) void video.setSinkId(speakerId).catch(()=>{}); },[stream,speakerId]); return <video ref={ref} autoPlay playsInline/>; }
+function TrackVideo({track,muted=false}:{track:MediaStreamTrack|null;muted?:boolean}){const ref=useRef<HTMLVideoElement>(null);useEffect(()=>{if(ref.current)ref.current.srcObject=track?new MediaStream([track]):null},[track]);return <video ref={ref} autoPlay playsInline muted={muted}/>}
+function StreamCard({name,theater,onTheater,children}:{id:string;name:string;theater:boolean;onTheater:()=>void;children:React.ReactNode}){return <article className={"stream-card "+(theater?"expanded":"")}><header><span><MonitorUp size={15}/><strong>{name}</strong><b>LIVE</b></span><div><button aria-label={theater?"Exit theater view":"Open theater view"} onClick={onTheater}>{theater?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</button><button aria-label="View fullscreen" onClick={(e)=>void(e.currentTarget.closest(".stream-card") as HTMLElement)?.requestFullscreen()}><Maximize2 size={17}/></button></div></header><div className="stream-video">{children}</div></article>}
 function VolumeIcon(){ return <span aria-hidden>◖))</span>; }
