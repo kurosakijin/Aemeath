@@ -32,7 +32,10 @@ async function ensureSchema() {
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'text';
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS topic TEXT NOT NULL DEFAULT '';
     CREATE TABLE IF NOT EXISTS voice_presence(channel TEXT NOT NULL,"user" TEXT NOT NULL REFERENCES accounts(id),joined BIGINT NOT NULL,updated BIGINT NOT NULL,PRIMARY KEY(channel,"user"));
+    ALTER TABLE voice_presence ADD COLUMN IF NOT EXISTS "left" BIGINT NOT NULL DEFAULT 0;
     CREATE TABLE IF NOT EXISTS voice_signals(id TEXT PRIMARY KEY,channel TEXT NOT NULL,"from" TEXT NOT NULL,"to" TEXT NOT NULL,body TEXT NOT NULL,created BIGINT NOT NULL);
+    CREATE TABLE IF NOT EXISTS voice_history(id TEXT PRIMARY KEY,channel TEXT NOT NULL,"user" TEXT NOT NULL,event TEXT NOT NULL,created BIGINT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_voice_history_channel_created ON voice_history(channel,created);
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,channel TEXT NOT NULL,"user" TEXT NOT NULL,body TEXT NOT NULL,created BIGINT NOT NULL);
     CREATE TABLE IF NOT EXISTS invites(code TEXT PRIMARY KEY,server TEXT NOT NULL,expires BIGINT NOT NULL);
     DO $$ BEGIN
