@@ -1833,3 +1833,56 @@ svg {
 .voice-room:has(.stream-deck) .voice-controls{z-index:10}
 @media(max-height:650px){.voice-room:has(.stream-deck) .stream-deck:not(.theater){padding-bottom:175px}.voice-room:has(.stream-deck) .voice-grid.with-streams{bottom:79px}.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{width:135px;min-width:135px;height:76px}.voice-room:has(.stream-deck) .stream-deck:not(.theater) .stream-video{max-height:calc(100dvh - 255px)}}
 @media(max-width:700px){.voice-room:has(.stream-deck) .stream-deck:not(.theater){padding:8px 8px 205px}.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{width:135px;min-width:135px;height:80px}}
+
+/* Active calls use one shared stacking-tile grid. */
+.voice-room:has(.stream-deck){
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-auto-rows:minmax(220px,1fr);
+  align-content:stretch;
+  gap:10px;
+  padding:10px 10px 92px;
+  overflow:auto;
+  background:#080709;
+}
+.voice-room:has(.stream-deck) .stream-deck:not(.theater),
+.voice-room:has(.stream-deck) .voice-grid.with-streams{
+  display:contents!important;
+}
+.voice-room:has(.stream-deck) .stream-deck:not(.theater) .stream-card,
+.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{
+  position:relative;
+  inset:auto;
+  transform:none;
+  width:100%;
+  min-width:0;
+  max-width:none;
+  height:100%;
+  max-height:none;
+  margin:0;
+  border-radius:13px;
+}
+.voice-room:has(.stream-deck) .stream-deck:not(.theater) .stream-card{
+  display:flex;
+  flex-direction:column;
+}
+.voice-room:has(.stream-deck) .stream-deck:not(.theater) .stream-video{
+  flex:1;
+  min-height:0;
+  max-height:none;
+  aspect-ratio:auto;
+}
+.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{
+  display:grid;
+  aspect-ratio:auto;
+  background:linear-gradient(145deg,#35202e,#6f3558);
+}
+.voice-room:has(.stream-deck) .voice-grid.with-streams .voice-avatar{
+  width:76px;
+  height:76px;
+  font-size:21px;
+}
+.voice-room:has(.stream-deck) .voice-status{position:fixed}
+@media(max-width:760px){
+  .voice-room:has(.stream-deck){grid-template-columns:1fr;grid-auto-rows:minmax(210px,42vh);padding:8px 8px 88px}
+}
