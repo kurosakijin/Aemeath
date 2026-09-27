@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, ChevronDown, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MoreHorizontal, PhoneOff, PictureInPicture2, Settings, Users, X } from "lucide-react";
+import {notifyAemeath} from "@/lib/notifications";
 
 type Person = { id: string; name: string; reconnecting?:number|boolean; left_at?:number };
 type Signal = { id: string; from: string; body: string; created: number };
@@ -178,7 +179,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
         const data = await response.json() as Record<string, any>; if (!response.ok) throw new Error(data.error);
         after.current = data.now || Date.now(); const list = (data.members || []) as Person[],live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));
         if (knownMembers.current) {
-          if (live.some((p) => p.id !== user.id && !knownMembers.current!.has(p.id))) roomTone("join");
+          const joinedPerson=live.find((p) => p.id !== user.id && !knownMembers.current!.has(p.id));if(joinedPerson)void notifyAemeath({key:`voice-${channel}-${joinedPerson.id}-${Date.now()}`,title:`${joinedPerson.name} joined ${name}`,body:"Someone joined your voice lobby",kind:"join"})
           if ([...knownMembers.current].some((id) => id !== user.id && !nextMembers.has(id))) roomTone("leave");
         }
         knownMembers.current = nextMembers; setMembers(list); live.forEach((p) => names.current.set(p.id, p.name));

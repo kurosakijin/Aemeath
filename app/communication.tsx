@@ -37,12 +37,14 @@ import {compressChatImage,imageFromClipboard,imageSource,isImageMessage,isSpoile
 import { CallProvider, useCalls } from "./call-provider";
 import MessageMenu from "./message-menu";
 import ImagePreview from "./image-preview";
+import {armNotifications,notifyAemeath} from "@/lib/notifications";
 type Conversation = {
   id: string;
   peer: string;
   name: string;
   preview: string | null;
   updated: number;
+  last_sender?: string | null;
   call_status?: string | null;
   call_reason?: string | null;
   call_kind?: "voice" | "video" | null;
@@ -100,6 +102,7 @@ function Inbox({
   const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
   const bottom = useRef<HTMLDivElement>(null),
     current = useRef(""),
+    conversationSeen = useRef<Map<string,number>|null>(null),
     pending = useRef<{ id: string; body: string; conversation: string } | null>(
       null,
     ),
@@ -111,9 +114,13 @@ function Inbox({
       request<{ conversations: Conversation[] }>("/api/direct"),
       onlineChat(),
     ]);
+    const stamps=new Map(d.conversations.map(item=>[item.id,timestamp(item.updated)]));
+    if(conversationSeen.current)for(const item of d.conversations){const previous=conversationSeen.current.get(item.id)||0;if(timestamp(item.updated)>previous&&item.last_sender&&item.last_sender!==user.id&&item.call_status!=="ringing")void notifyAemeath({key:`dm-${item.id}-${item.updated}`,title:item.name,body:item.preview||"Sent you a message"})}
+    conversationSeen.current=stamps;
     setConversations(d.conversations);
     setServers(s.servers);
-  }, []);
+  }, [user.id]);
+  useEffect(()=>{armNotifications()},[]);
   useEffect(() => {
     let mounted = true;
     const poll = async () => {

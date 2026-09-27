@@ -19,6 +19,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { request, type LocalUser } from "@/lib/online";
+import {notifyAemeath} from "@/lib/notifications";
 type Call = {
   id: string;
   conversation: string;
@@ -440,6 +441,7 @@ export function CallProvider({
           const d = await request<{ incoming: Call | null }>("/api/calls");
           if (mounted && !active.current && d.incoming) {
             const c = d.incoming;
+            void notifyAemeath({key:`call-${c.id}`,title:`Incoming ${c.kind} call`,body:`${c.callerName||"Someone"} is calling`,kind:"call"});
             setError("");
             show({
               id: c.id,

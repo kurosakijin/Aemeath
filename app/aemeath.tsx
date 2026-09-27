@@ -38,6 +38,7 @@ import ServerSettings from "./server-settings";
 import MessageMenu from "./message-menu";
 import ImagePreview from "./image-preview";
 import {compressChatImage,imageFromClipboard,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
+import {notifyAemeath} from "@/lib/notifications";
 import {
   SidebarProvider,
   Sidebar,
@@ -218,6 +219,7 @@ export default function Aemeath({
         const d = await api("?channel=" + encodeURIComponent(current)+(after?"&after="+Math.max(0,after-1):""));
         if (alive) {
           const incoming=(d.messages||[]) as Message[];
+          if(after)incoming.filter(item=>item.user!==user?.id&&Number(item.created)>after).forEach(item=>void notifyAemeath({key:`server-${item.id}`,title:`#${channel?.name||"lobby"} · ${server?.name||"Aemeath"}`,body:isImageMessage(item.body)?`${item.name||"Member"} sent an image`:`${item.name||"Member"}: ${item.body.slice(0,120)}`}));
           if(after)setMessages(old=>{const merged=new Map(old.map(item=>[item.id,item]));incoming.forEach(item=>merged.set(item.id,item));return [...merged.values()].sort((a,b)=>Number(a.created)-Number(b.created))});
           else setMessages(incoming);
           if(incoming.length)messageAfter.current=Math.max(messageAfter.current,...incoming.map(item=>Number(item.created)||0));
@@ -233,7 +235,7 @@ export default function Aemeath({
       alive = false;
       clearInterval(t);
     };
-  }, [current]);
+  }, [current,user?.id,channel?.name,server?.name]);
   useEffect(() => {
     if (messages.length !== messageCount.current) {
       end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
