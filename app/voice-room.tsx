@@ -75,6 +75,8 @@ function mixShareAudio(microphone:MediaStreamTrack|null,system:MediaStreamTrack)
 }
 
 let roomAudio: AudioContext | null = null;
+let voicePlaybackAudio: AudioContext | null = null;
+function getVoicePlaybackAudio(){voicePlaybackAudio??=new AudioContext({latencyHint:"interactive"});return voicePlaybackAudio}
 function roomTone(kind: "join" | "leave" | "stream-start" | "stream-stop" | "watch-start" | "watch-stop") {
   try {
     roomAudio ??= new AudioContext();
@@ -217,6 +219,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   }, [channel, joined, user.id, offer, handleSignal, closePeer]);
 
   async function join() {
+    const playback=getVoicePlaybackAudio();void playback.resume();
     setBusy(true); setError("");
     try {
       const config = await fetch("/api/calls?config=1").then((r) => r.json()) as Record<string, any>; ice.current = config.iceServers || [];
@@ -302,18 +305,17 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   </section>;
 }
 function RemoteAudioMixer({remotes,speakerId}:{remotes:Remote[];speakerId:string}){
-  const ref=useRef<HTMLAudioElement>(null),trackSignature=remotes.flatMap(remote=>remote.stream.getAudioTracks().map(track=>`${remote.id}:${track.id}:${track.readyState}`)).sort().join("|");
+  const trackSignature=remotes.flatMap(remote=>remote.stream.getAudioTracks().map(track=>`${remote.id}:${track.id}:${track.readyState}`)).sort().join("|");
   useEffect(()=>{
-    const audio=ref.current as (HTMLAudioElement&{setSinkId?:(id:string)=>Promise<void>})|null;if(!audio)return;
-    const context=new AudioContext({latencyHint:"interactive"}),destination=context.createMediaStreamDestination(),compressor=context.createDynamicsCompressor(),nodes:AudioNode[]=[];
-    compressor.threshold.value=-16;compressor.knee.value=20;compressor.ratio.value=4;compressor.attack.value=.003;compressor.release.value=.2;compressor.connect(destination);nodes.push(compressor);
+    const context=getVoicePlaybackAudio() as AudioContext&{setSinkId?:(id:string)=>Promise<void>},compressor=context.createDynamicsCompressor(),nodes:AudioNode[]=[];
+    compressor.threshold.value=-16;compressor.knee.value=20;compressor.ratio.value=4;compressor.attack.value=.003;compressor.release.value=.2;compressor.connect(context.destination);nodes.push(compressor);
     const tracks=remotes.flatMap(remote=>remote.stream.getAudioTracks()).filter(track=>track.readyState==="live"),level=Math.min(1,1.35/Math.sqrt(Math.max(1,tracks.length)));
     for(const track of tracks){const source=context.createMediaStreamSource(new MediaStream([track])),gain=context.createGain();gain.gain.value=level;source.connect(gain).connect(compressor);nodes.push(source,gain)}
-    audio.srcObject=destination.stream;audio.muted=false;audio.volume=1;if(audio.setSinkId)void audio.setSinkId(speakerId).catch(()=>{});
-    const play=()=>{void context.resume();if(tracks.length)void audio.play().catch(()=>{})};play();document.addEventListener("pointerdown",play,{passive:true});document.addEventListener("touchend",play,{passive:true});
-    return()=>{document.removeEventListener("pointerdown",play);document.removeEventListener("touchend",play);audio.pause();audio.srcObject=null;nodes.forEach(node=>node.disconnect());destination.stream.getTracks().forEach(track=>track.stop());void context.close()};
+    if(context.setSinkId)void context.setSinkId(speakerId).catch(()=>{});
+    const play=()=>{void context.resume()};play();document.addEventListener("pointerdown",play,{passive:true});document.addEventListener("touchend",play,{passive:true});
+    return()=>{document.removeEventListener("pointerdown",play);document.removeEventListener("touchend",play);nodes.forEach(node=>node.disconnect())};
   },[trackSignature,speakerId]);
-  return <audio ref={ref} autoPlay playsInline/>;
+  return null;
 }
 function TrackVideo({track,muted=false}:{track:MediaStreamTrack|null;muted?:boolean}){const ref=useRef<HTMLVideoElement>(null);useEffect(()=>{const video=ref.current;if(!video)return;video.srcObject=track?new MediaStream([track]):null;if(track)void video.play().catch(()=>{});return()=>{video.srcObject=null}},[track]);return <video ref={ref} autoPlay playsInline muted={muted}/>}
 function StreamCard({name,theater,onTheater,onStop,onChange,onWatch,children}:{id:string;name:string;theater:boolean;onTheater:()=>void;onStop?:()=>void;onChange?:()=>void;onWatch?:(active:boolean)=>void;children:React.ReactNode}){const [menu,setMenu]=useState(false),card=useRef<HTMLElement>(null),fullscreenWatching=useRef(false);useEffect(()=>{const change=()=>{const active=document.fullscreenElement===card.current;if(active!==fullscreenWatching.current){fullscreenWatching.current=active;onWatch?.(active)}};document.addEventListener("fullscreenchange",change);return()=>document.removeEventListener("fullscreenchange",change)},[onWatch]);const pip=async(element:HTMLElement)=>{const video=element.querySelector("video");if(video&&document.pictureInPictureEnabled){video.addEventListener("enterpictureinpicture",()=>onWatch?.(true),{once:true});video.addEventListener("leavepictureinpicture",()=>onWatch?.(false),{once:true});await video.requestPictureInPicture().catch(()=>{})}};return <article ref={card} className={"stream-card "+(theater?"expanded":"")}><header><span><MonitorUp size={15}/><strong>{name}</strong><b>LIVE</b></span><div><button aria-label="Pop out stream" onClick={(e)=>void pip(e.currentTarget.closest(".stream-card") as HTMLElement)}><PictureInPicture2 size={17}/></button><button aria-label={theater?"Exit theater view":"Open theater view"} onClick={onTheater}>{theater?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</button><button aria-label="View fullscreen" onClick={(e)=>void(e.currentTarget.closest(".stream-card") as HTMLElement)?.requestFullscreen()}><Maximize2 size={17}/></button><button aria-label="Stream options" onClick={()=>setMenu(!menu)}><MoreHorizontal size={17}/></button></div>{menu&&<div className="stream-card-menu">{onStop&&<button onClick={onStop}>Stop streaming</button>}{onChange&&<button onClick={onChange}>Change stream</button>}<button onClick={(e)=>void pip(e.currentTarget.closest(".stream-card") as HTMLElement)}>Pop out</button><button onClick={onTheater}>{theater?"Exit theater":"Theater view"}</button><button onClick={(e)=>void(e.currentTarget.closest(".stream-card") as HTMLElement)?.requestFullscreen()}>Fullscreen</button></div>}</header><div className="stream-video" onClick={onTheater} title={theater?"Exit theater view":"Open theater view"}>{children}</div></article>}
