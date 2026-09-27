@@ -112,6 +112,13 @@ export async function POST(r: Request) {
       ]);
       return json({ ok: true });
     }
+    if(d.action==="delete-message"){
+      const messageId=str(d.id);
+      const found=await db.prepare("SELECT conversation FROM direct_messages WHERE id=? AND sender=?").bind(messageId,u.id).first<{conversation:string}>();
+      if(!found)throw new AppError("You can only delete your own messages.",403);
+      await db.prepare("DELETE FROM direct_messages WHERE id=? AND sender=?").bind(messageId,u.id).run();
+      return json({ok:true});
+    }
     throw new AppError("Unknown action.");
   } catch (e) {
     return failure(e);

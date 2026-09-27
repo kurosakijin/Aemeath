@@ -35,6 +35,7 @@ import { request, onlineChat, type LocalUser } from "@/lib/online";
 import Hearth from "./hearth";
 import {compressChatImage,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import { CallProvider, useCalls } from "./call-provider";
+import MessageMenu from "./message-menu";
 type Conversation = {
   id: string;
   peer: string;
@@ -524,6 +525,7 @@ function Inbox({
                         </time>
                         {isImageMessage(m.body)?<div className={isSpoilerImage(m.body)?"spoiler-image":""}><img className="chat-image" src={imageSource(m.body)} alt="Shared image" loading="lazy" onClick={(e)=>{e.currentTarget.parentElement?.classList.remove("spoiler-image");void e.currentTarget.requestFullscreen?.()}}/></div>:<p>{m.body}</p>}
                       </div>
+                      <MessageMenu id={m.id} body={m.body} own={m.sender===user.id} onReply={()=>setDraft(`@${m.name} `)} onDelete={async()=>{try{await request("/api/direct",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id));await refresh()}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/>
                     </article>
                   </div>
                 ))}
@@ -686,3 +688,4 @@ export default function Communication({
     </CallProvider>
   );
 }
+

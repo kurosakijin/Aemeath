@@ -182,6 +182,15 @@ export async function POST(request: Request) {
         .run();
       return json({ ok: true });
     }
+    if(action==="delete-message"){
+      const id=typeof data.id==="string"?data.id:"";
+      const found=await db.prepare("SELECT m.user,c.server FROM messages m JOIN channels c ON c.id=m.channel WHERE m.id=?").bind(id).first<{user:string;server:string}>();
+      if(!found)return bad("Message not found.",404);
+      const target=await membership(found.server,uid);
+      if(!target||(found.user!==uid&&target.owner!==uid))return bad("You cannot delete this message.",403);
+      await db.prepare("DELETE FROM messages WHERE id=?").bind(id).run();
+      return json({ok:true});
+    }
     if (typeof data.server !== "string") return bad("Choose a server.");
     const server = await membership(data.server, uid);
     if (!server || server.owner !== uid)
