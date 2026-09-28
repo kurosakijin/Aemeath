@@ -2150,6 +2150,7 @@ html.desktop-app .signed-in-downloads{display:none}
 
 /* Motion and interaction system */
 :root{--motion-ease:cubic-bezier(.22,1,.36,1);--motion-fast:150ms;--motion-normal:280ms}
+.app-loading{width:100vw;height:100dvh;display:grid;place-items:center;background:#1f2025;color:#b8b1b8;font-size:13px;font-weight:700;letter-spacing:.02em}
 .server-icon,.channel,.dm-person,.toolbar-button,.profile-button,.primary,.join-link,.voice-controls button,.stream-card header button,.composer button,.app-downloads a,.message-reaction-bar,.aemeath-action-list button{transition:transform var(--motion-fast) ease,background-color var(--motion-fast) ease,color var(--motion-fast) ease,border-color var(--motion-fast) ease,box-shadow var(--motion-fast) ease,opacity var(--motion-fast) ease}
 .server-icon:hover,.toolbar-button:hover,.profile-button:hover,.voice-controls>button:hover,.voice-controls>.stream-control>button:hover{transform:translateY(-2px)}
 .server-icon:active,.toolbar-button:active,.profile-button:active,.primary:active,.voice-controls button:active,.app-downloads a:active{transform:scale(.94)}

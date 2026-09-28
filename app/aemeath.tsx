@@ -39,6 +39,7 @@ import MessageMenu from "./message-menu";
 import ImagePreview from "./image-preview";
 import {compressChatImage,imageFromClipboard,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import {notifyAemeath} from "@/lib/notifications";
+import {readNavigationMemory,writeNavigationMemory} from "@/lib/navigation-memory";
 import {
   SidebarProvider,
   Sidebar,
@@ -129,6 +130,7 @@ export default function Aemeath({
       null,
     ),
     messageCount = useRef(0);
+  const rememberedChannel=useRef(""),channelsServer=useRef("");
   const server = servers.find((s) => s.id === selected),
     channel = channels.find((c) => c.id === current),
     isVoice = channel?.kind === "voice",
@@ -152,8 +154,9 @@ export default function Aemeath({
     const data = await api();
     setServers(data.servers);
     if (data.profile?.name) setName(data.profile.name);
-    setSelected((old) => preferred || old || data.servers[0]?.id || "");
+    setSelected((old) => {const candidate=preferred||old;return candidate&&data.servers.some((item:Server)=>item.id===candidate)?candidate:data.servers[0]?.id||""});
   }, []);
+  useEffect(()=>{const saved=readNavigationMemory(user.id);if(saved?.view==="server"&&saved.server===initialServer)rememberedChannel.current=saved.channel||""},[user.id,initialServer]);
   useEffect(() => {
     const invite = new URLSearchParams(window.location.search).get("invite");
     if (invite) {
@@ -169,6 +172,7 @@ export default function Aemeath({
   }, [user, refreshServers]);
   useEffect(() => {
     serverRef.current = selected;
+    channelsServer.current = "";
     setChannels([]);
     setMembers([]);
     setVoiceMembers([]);
@@ -181,14 +185,11 @@ export default function Aemeath({
       try {
         const d = await api("?server=" + encodeURIComponent(selected));
         if (alive) {
+          channelsServer.current = selected;
           setChannels(d.channels);
           setMembers(d.members);
           setVoiceMembers(d.voiceMembers||[]);
-          setCurrent((old) =>
-            d.channels.some((c: Channel) => c.id === old)
-              ? old
-              : d.channels[0]?.id || "",
-          );
+          setCurrent((old) => {const candidate=d.channels.some((c:Channel)=>c.id===old)?old:d.channels.some((c:Channel)=>c.id===rememberedChannel.current)?rememberedChannel.current:"";rememberedChannel.current="";return candidate||d.channels[0]?.id||""});
           setError("");
         }
       } catch (e) {
@@ -204,6 +205,7 @@ export default function Aemeath({
       clearInterval(t);
     };
   }, [selected]);
+  useEffect(()=>{if(selected&&current&&channelsServer.current===selected)writeNavigationMemory(user.id,{view:"server",server:selected,channel:current})},[user.id,selected,current]);
   useEffect(() => {
     room.current = current;
     setMessages([]);

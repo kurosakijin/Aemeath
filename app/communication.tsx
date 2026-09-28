@@ -38,6 +38,7 @@ import { CallProvider, useCalls } from "./call-provider";
 import MessageMenu from "./message-menu";
 import ImagePreview from "./image-preview";
 import {armNotifications,notifyAemeath} from "@/lib/notifications";
+import {readNavigationMemory,writeNavigationMemory} from "@/lib/navigation-memory";
 type Conversation = {
   id: string;
   peer: string;
@@ -99,6 +100,7 @@ function Inbox({
     [starting, setStarting] = useState(false),
     [more, setMore] = useState(false),
     [olderLoading, setOlderLoading] = useState(false);
+  const [navigationReady,setNavigationReady]=useState(false);
   const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
   const bottom = useRef<HTMLDivElement>(null),
     current = useRef(""),
@@ -109,6 +111,7 @@ function Inbox({
     count = useRef(0);
   const calls = useCalls();
   const conversation = conversations.find((c) => c.id === selected);
+  useEffect(()=>{const saved=readNavigationMemory(user.id);if(saved?.view==="server"&&saved.server)setServerView(saved.server);else if(saved?.view==="direct"&&saved.conversation)setSelected(saved.conversation);setNavigationReady(true)},[user.id]);
   const refresh = useCallback(async () => {
     const [d, s] = await Promise.all([
       request<{ conversations: Conversation[] }>("/api/direct"),
@@ -119,6 +122,7 @@ function Inbox({
     conversationSeen.current=stamps;
     setConversations(d.conversations);
     setServers(s.servers);
+    setSelected(old=>old&&d.conversations.some(item=>item.id===old)?old:"");
   }, [user.id]);
   useEffect(()=>{armNotifications()},[]);
   useEffect(() => {
@@ -291,12 +295,13 @@ function Inbox({
     setSearchError("");
     setDialog(true);
   };
+  if(!navigationReady)return <div className="app-loading">Restoring your last channel…</div>;
   if (serverView !== null)
     return (
       <Aemeath
         user={user}
         onSettings={onSettings}
-        onDirect={() => setServerView(null)}
+        onDirect={() => {writeNavigationMemory(user.id,{view:"direct"});setServerView(null)}}
         initialServer={serverView}
         startCreate={!serverView}
       />
@@ -315,6 +320,7 @@ function Inbox({
             title="Direct messages"
             onClick={() => {
               setSelected("");
+              writeNavigationMemory(user.id,{view:"direct"});
               setMobile(false);
             }}
           >
@@ -327,7 +333,7 @@ function Inbox({
               key={s.id}
               title={s.name}
               aria-label={s.name}
-              onClick={() => setServerView(s.id)}
+              onClick={() => {writeNavigationMemory(user.id,{view:"server",server:s.id});setServerView(s.id)}}
             >
               {s.name.slice(0, 2).toUpperCase()}
             </button>
@@ -374,6 +380,7 @@ function Inbox({
                 key={c.id}
                 onClick={() => {
                   setSelected(c.id);
+                  writeNavigationMemory(user.id,{view:"direct",conversation:c.id});
                   setMobile(false);
                 }}
               >
