@@ -436,12 +436,10 @@ export default function Aemeath({
               <button className="server-title-menu-button" onClick={()=>server&&setServerMenu(!serverMenu)} aria-expanded={serverMenu}>
                 <span>{server?.name || "Your space"}</span>{server&&<ChevronDown size={16}/>} 
               </button>
-              <button
-                aria-label="Close channels"
-                onClick={() => setMobile(false)}
-              >
-                {mobile ? <X size={17} /> : <Lock size={15} />}
-              </button>
+              <div className="server-title-actions">
+                {server&&owner&&<button className="server-invite-button" aria-label="Invite people" title="Invite people" onClick={()=>void invite()}><UserPlus size={18}/></button>}
+                {mobile&&<button className="server-sidebar-close" aria-label="Close channels" onClick={()=>setMobile(false)}><X size={18}/></button>}
+              </div>
             </header>
             {serverMenu&&server&&<div className="server-menu">
               <button onClick={()=>{setServerMenu(false);void invite()}}><UserPlus size={17}/> Invite to server</button>
@@ -452,11 +450,6 @@ export default function Aemeath({
               <div/>
               <button onClick={()=>{void navigator.clipboard.writeText(server.id);setServerMenu(false)}}><Copy size={17}/> Copy server ID</button>
             </div>}
-            {server && owner && (
-              <button className="invite-row" onClick={invite}>
-                <UserPlus size={16} /> Invite your people
-              </button>
-            )}
             <div className="channel-group">
               <span>TEXT CHANNELS</span>
               {owner && (
