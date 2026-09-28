@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, ChevronDown, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MoreHorizontal, PhoneOff, PictureInPicture2, Settings, SwitchCamera, Users, X } from "lucide-react";
 import {notifyAemeath} from "@/lib/notifications";
-import {Room as LiveKitRoom,RoomEvent as LiveKitRoomEvent,Track as LiveKitTrack,type RemoteParticipant,type RemoteTrack} from "livekit-client";
+import {Room as LiveKitRoom,RoomEvent as LiveKitRoomEvent,Track as LiveKitTrack,type RemoteAudioTrack,type RemoteParticipant,type RemoteTrack} from "livekit-client";
 
 type Person = { id: string; name: string; reconnecting?:number|boolean; left_at?:number };
 type Signal = { id: string; from: string; body: string; created: number };
@@ -125,26 +125,30 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     [echoCancellation, setEchoCancellation] = useState(true), [noiseSuppression, setNoiseSuppression] = useState(true),
     [sensitivity, setSensitivity] = useState(55), [remoteSharing, setRemoteSharing] = useState<Set<string>>(new Set()),
     [theaterStream, setTheaterStream] = useState(""), [streamFps,setStreamFps]=useState(60),
-    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080"),[clock,setClock]=useState(Date.now()),[mobileDevice,setMobileDevice]=useState(false),[screenShareSupported,setScreenShareSupported]=useState(false),[takenOver,setTakenOver]=useState(false);
+    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080"),[clock,setClock]=useState(Date.now()),[mobileDevice,setMobileDevice]=useState(false),[screenShareSupported,setScreenShareSupported]=useState(false),[takenOver,setTakenOver]=useState(false),[mediaTransport,setMediaTransport]=useState<"mesh"|"livekit">("mesh");
   const [streamMenu,setStreamMenu]=useState(false);
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), peerSlots=useRef(new Map<string,PeerSlots>()), names = useRef(new Map<string, string>()),
     pendingIce=useRef(new Map<string,RTCIceCandidateInit[]>()),seenSignals=useRef(new Set<string>()),polling=useRef(false),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
-    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>()),restartAttempts=useRef(new Map<string,number>()),livekitRoom=useRef<LiveKitRoom|null>(null),sfuActive=useRef(false),voiceSession=useRef(crypto.randomUUID());
+    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>()),restartAttempts=useRef(new Map<string,number>()),livekitRoom=useRef<LiveKitRoom|null>(null),livekitAudio=useRef(new Map<string,{track:RemoteAudioTrack;element:HTMLMediaElement}>()),speakerIdRef=useRef("default"),sfuActive=useRef(false),voiceSession=useRef(crypto.randomUUID());
 
   const voicePost=useCallback((data:Record<string,unknown>)=>post(channel,{...data,session:voiceSession.current}),[channel]);
   const signal = useCallback((to: string, body: unknown) => voicePost({ action: "signal", to, body: JSON.stringify(body) }), [voicePost]);
   const addLiveKitTrack=useCallback((track:RemoteTrack,participant:RemoteParticipant)=>{
     const mediaTrack=track.mediaStreamTrack;mediaTrack.enabled=true;
+    if(track.kind===LiveKitTrack.Kind.Audio){const audioTrack=track as RemoteAudioTrack,key=track.sid||mediaTrack.id,previous=livekitAudio.current.get(key);if(!previous){const element=audioTrack.attach();element.autoplay=true;element.setAttribute("playsinline","");element.style.display="none";document.body.appendChild(element);livekitAudio.current.set(key,{track:audioTrack,element});void audioTrack.setSinkId(speakerIdRef.current).catch(()=>{});void element.play().catch(()=>{})}}
     setRemotes(old=>{const existing=old.find(remote=>remote.id===participant.identity),stream=existing?.stream||new MediaStream();if(!stream.getTracks().some(current=>current.id===mediaTrack.id))stream.addTrack(mediaTrack);return[...old.filter(remote=>remote.id!==participant.identity),{id:participant.identity,name:participant.name||participant.identity,stream}]});
     if(mediaTrack.kind==="video")setRemoteSharing(old=>new Set(old).add(participant.identity));
   },[]);
   const removeLiveKitTrack=useCallback((track:RemoteTrack,participant:RemoteParticipant)=>{
     const mediaTrack=track.mediaStreamTrack;
+    if(track.kind===LiveKitTrack.Kind.Audio){const key=track.sid||mediaTrack.id,attached=livekitAudio.current.get(key);attached?.track.detach();attached?.element.remove();livekitAudio.current.delete(key)}
     setRemotes(old=>old.map(remote=>{if(remote.id!==participant.identity)return remote;try{remote.stream.removeTrack(mediaTrack)}catch{}return remote}).filter(remote=>remote.stream.getTracks().length>0));
     if(mediaTrack.kind==="video")setRemoteSharing(old=>{const next=new Set(old);const remote=remotes.find(item=>item.id===participant.identity);if(!remote?.stream.getVideoTracks().some(item=>item.id!==mediaTrack.id))next.delete(participant.identity);return next});
   },[remotes]);
+  const clearLiveKitAudio=useCallback(()=>{for(const {track,element} of livekitAudio.current.values()){track.detach();element.remove()}livekitAudio.current.clear()},[]);
+  useEffect(()=>{speakerIdRef.current=speakerId;for(const {track} of livekitAudio.current.values())void track.setSinkId(speakerId).catch(()=>{})},[speakerId]);
   const syncPeerTracks=useCallback(async()=>{
     const audio=screenAudioTrack.current||microphoneTrack.current,camera=cameraTrack.current,screen=screenTrack.current;
     await Promise.allSettled([...peerSlots.current.values()].map(async slots=>{
@@ -225,7 +229,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     room.on(LiveKitRoomEvent.Reconnecting,()=>setError("Voice media is reconnecting through LiveKit…"));
     room.on(LiveKitRoomEvent.Reconnected,()=>setError(current=>current.startsWith("Voice media is reconnecting")?"":current));
     await room.connect(config.url,config.token,{autoSubscribe:true,maxRetries:5});
-    livekitRoom.current=room;sfuActive.current=true;
+    livekitRoom.current=room;sfuActive.current=true;setMediaTransport("livekit");
     if(microphoneTrack.current)await room.localParticipant.publishTrack(microphoneTrack.current,{source:LiveKitTrack.Source.Microphone,audioPreset:{maxBitrate:192_000}});
     await room.startAudio().catch(()=>{});
     return true;
@@ -234,11 +238,12 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   const leave = useCallback(async () => {
     if (!joined && !local.current) return;
     roomTone("leave");
-    setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
+    setJoined(false);joinedRef.current=false;setMediaTransport("mesh");captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;clearLiveKitAudio();await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
     disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach((pc) => pc.close()); peers.current.clear();peerSlots.current.clear();pendingIce.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
     try { await voicePost({ action: "leave" }); } catch {}
-  }, [joined,voicePost]);
-  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.();void livekitRoom.current?.disconnect();local.current?.getTracks().forEach((t) => t.stop());disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear(); peers.current.forEach((p) => p.close()); if(joinedRef.current)void voicePost({ action: "leave" }); }, [voicePost]);
+  }, [joined,voicePost,clearLiveKitAudio]);
+  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.();clearLiveKitAudio();void livekitRoom.current?.disconnect();local.current?.getTracks().forEach((t) => t.stop());disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear(); peers.current.forEach((p) => p.close()); if(joinedRef.current)void voicePost({ action: "leave" }); }, [voicePost,clearLiveKitAudio]);
+  useEffect(()=>{if(!joined)return;const start=()=>{void getVoicePlaybackAudio().resume();void livekitRoom.current?.startAudio().catch(()=>{});for(const {element} of livekitAudio.current.values())void element.play().catch(()=>{})};document.addEventListener("pointerdown",start,{passive:true});document.addEventListener("touchend",start,{passive:true});return()=>{document.removeEventListener("pointerdown",start);document.removeEventListener("touchend",start)}},[joined]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[]);
   useEffect(()=>{const mobile=matchMedia("(pointer: coarse)").matches||navigator.maxTouchPoints>1;setMobileDevice(mobile);if(mobile)setCameraId(current=>current==="default"?"front":current);const legacy=navigator as Navigator&{getDisplayMedia?:typeof navigator.mediaDevices.getDisplayMedia};setScreenShareSupported(typeof navigator.mediaDevices?.getDisplayMedia==="function"||typeof legacy.getDisplayMedia==="function")},[]);
   useEffect(() => { if (localVideo.current) localVideo.current.srcObject = sharing&&screenTrack.current?new MediaStream([screenTrack.current]):local.current; }, [camera, sharing, joined]);
@@ -255,7 +260,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       try {
         const response = await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Math.max(0,after.current-3000)}&session=${encodeURIComponent(voiceSession.current)}`, { cache: "no-store" });
         const data = await response.json() as Record<string, any>; if (!response.ok) throw new Error(data.error);
-        if(data.displaced){roomTone("leave");joinedRef.current=false;setJoined(false);setTakenOver(true);captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;local.current?.getTracks().forEach(track=>track.stop());local.current=null;microphoneTrack.current=null;cameraTrack.current=null;screenTrack.current=null;screenAudioTrack.current=null;disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach(peer=>peer.close());peers.current.clear();peerSlots.current.clear();pendingIce.current.clear();setRemotes([]);setRemoteSharing(new Set());setCamera(false);setSharing(false);setError("");return}
+        if(data.displaced){roomTone("leave");joinedRef.current=false;setJoined(false);setMediaTransport("mesh");setTakenOver(true);captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;clearLiveKitAudio();await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false;local.current?.getTracks().forEach(track=>track.stop());local.current=null;microphoneTrack.current=null;cameraTrack.current=null;screenTrack.current=null;screenAudioTrack.current=null;disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach(peer=>peer.close());peers.current.clear();peerSlots.current.clear();pendingIce.current.clear();setRemotes([]);setRemoteSharing(new Set());setCamera(false);setSharing(false);setError("");return}
         after.current = Math.max(after.current,data.now||Date.now()); const list = (data.members || []) as Person[],live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));
         if (knownMembers.current) {
           const joinedPerson=live.find((p) => p.id !== user.id && !knownMembers.current!.has(p.id));if(joinedPerson)void notifyAemeath({key:`voice-${channel}-${joinedPerson.id}-${Date.now()}`,title:`${joinedPerson.name} joined ${name}`,body:"Someone joined your voice lobby",kind:"join"})
@@ -274,7 +279,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     };
     void poll(); const timer = setInterval(() => { void voicePost({ action: "heartbeat" }); void poll(); }, 1500);
     return () => clearInterval(timer);
-  }, [channel, joined, user.id, offer, handleSignal, closePeer, syncPeerTracks,voicePost]);
+  }, [channel, joined, user.id, offer, handleSignal, closePeer, syncPeerTracks,voicePost,clearLiveKitAudio]);
 
   async function join() {
     const playback=getVoicePlaybackAudio();void playback.resume();
@@ -352,7 +357,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
         {camera&&<StreamCard id={`${user.id}-camera`} name={`${user.name}'s camera`} theater={theaterStream===`${user.id}-camera`} onTheater={()=>setTheaterStream(theaterStream===`${user.id}-camera`?"":`${user.id}-camera`)} onStop={()=>void toggleCamera()}><TrackVideo track={cameraTrack.current} muted/></StreamCard>}
         {remotes.filter((r)=>remoteSharing.has(r.id)).flatMap((remote)=>remote.stream.getVideoTracks().map((track,index,tracks)=>{const tileId=`${remote.id}-${track.id}`,focused=theaterStream===tileId,label=tracks.length>1?(index===0?"camera":"screen"):"stream";return <StreamCard key={tileId} id={tileId} name={`${remote.name}'s ${label}`} theater={focused} onTheater={()=>{const active=!focused;setTheaterStream(active?tileId:"");void signal(remote.id,{type:"stream-watch",active})}} onWatch={(active)=>void signal(remote.id,{type:"stream-watch",active})}><TrackVideo track={track} muted/></StreamCard>}))}
       </div>}
-      <RemoteAudioMixer remotes={remotes} speakerId={speakerId}/>
+      {mediaTransport==="mesh"&&<RemoteAudioMixer remotes={remotes} speakerId={speakerId}/>} 
       <div className={"voice-grid "+((sharing||camera||remoteSharing.size)?"with-streams":"")}>
         <div className="voice-tile local"><div className="voice-avatar">{user.name.slice(0,2).toUpperCase()}</div>{(sharing||camera)&&<span className="streaming-badge"><MonitorUp size={13}/> Streaming</span>}<span>{user.name} · You</span></div>
         {visibleMembers.filter(member=>member.id!==user.id).map((member) => {const remote=remotes.find(item=>item.id===member.id);return <div className="voice-tile" key={member.id}><div className="voice-avatar">{member.name.slice(0,2).toUpperCase()}</div>{remoteSharing.has(member.id)&&<span className="streaming-badge"><MonitorUp size={13}/> Streaming</span>}<span>{member.name}{remote?"":" · Connecting…"}</span></div>})}
