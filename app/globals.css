@@ -2023,6 +2023,26 @@ html.desktop-app .signed-in-downloads{display:none}
   padding:0!important;
   overflow:auto;
 }
+.stream-layout-switch{
+  position:absolute;
+  z-index:8;
+  top:52px;
+  right:12px;
+  display:flex;
+  gap:3px;
+  padding:4px;
+  border:1px solid #ffffff24;
+  border-radius:10px;
+  background:#111b;
+  box-shadow:0 8px 26px #0008;
+  backdrop-filter:blur(8px);
+}
+.stream-layout-switch button{width:34px;height:32px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:#a8a4ab;cursor:pointer}
+.stream-layout-switch button:hover,.stream-layout-switch button.active{background:#ffffff18;color:#fff}
+.voice-room:has(.stream-deck) .stream-deck.focus-view{display:flex!important;align-items:stretch;justify-content:center}
+.voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card:not(.focused){display:none}
+.voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card.focused{flex:1}
+.voice-room:has(.stream-deck) .stream-deck.tiles-view{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}
 .voice-room:has(.stream-deck) .stream-card{
   position:relative;
   width:100%!important;
@@ -2115,6 +2135,7 @@ html.desktop-app .signed-in-downloads{display:none}
   .voice-room:has(.stream-deck) .voice-grid.with-streams .voice-avatar{width:40px;height:40px;font-size:12px}
   .stream-card header{height:40px}
   .stream-card header strong{font-size:12px}
+  .stream-layout-switch{top:47px;right:8px}
   .stream-fullscreen{right:8px;bottom:8px;width:38px;height:38px}
 }
 /* Viewport-mounted message action panel */
