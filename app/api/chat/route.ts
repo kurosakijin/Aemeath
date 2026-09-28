@@ -195,7 +195,8 @@ export async function POST(request: Request) {
     }
     if (typeof data.server !== "string") return bad("Choose a server.");
     const server = await membership(data.server, uid);
-    if (!server || server.owner !== uid)
+    if (!server) return bad("You do not have access to this server.", 403);
+    if (action !== "invite" && server.owner !== uid)
       return bad("Only the server owner can do that.", 403);
     if (action === "edit-server") {
       const name = typeof data.name === "string" ? data.name.trim() : "";

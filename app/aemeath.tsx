@@ -437,7 +437,7 @@ export default function Aemeath({
                 <span>{server?.name || "Your space"}</span>{server&&<ChevronDown size={16}/>} 
               </button>
               <div className="server-title-actions">
-                {server&&owner&&<button className="server-invite-button" aria-label="Invite people" title="Invite people" onClick={()=>void invite()}><UserPlus size={18}/></button>}
+                {server&&<button className="server-invite-button" aria-label="Invite people" title="Invite people" onClick={()=>void invite()}><UserPlus size={18}/></button>}
                 {mobile&&<button className="server-sidebar-close" aria-label="Close channels" onClick={()=>setMobile(false)}><X size={18}/></button>}
               </div>
             </header>
