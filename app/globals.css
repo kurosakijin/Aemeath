@@ -2039,9 +2039,9 @@ html.desktop-app .signed-in-downloads{display:none}
 }
 .stream-layout-switch button{width:34px;height:32px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:#a8a4ab;cursor:pointer}
 .stream-layout-switch button:hover,.stream-layout-switch button.active{background:#ffffff18;color:#fff}
-.voice-room:has(.stream-deck) .stream-deck.focus-view{display:flex!important;align-items:stretch;justify-content:center}
+.voice-room:has(.stream-deck) .stream-deck.focus-view{display:flex!important;align-items:center;justify-content:center;padding:0 16px!important;background:#000}
 .voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card:not(.focused){display:none}
-.voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card.focused{flex:1}
+.voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card.focused{flex:0 1 auto;width:min(100%,calc((100dvh - 280px)*1.7778))!important;height:min(100%,calc((100vw - 52px)*.5625 + 44px))!important;max-width:1180px!important;margin:auto}
 .voice-room:has(.stream-deck) .stream-deck.tiles-view{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}
 .voice-room:has(.stream-deck) .stream-card{
   position:relative;
@@ -2070,6 +2070,8 @@ html.desktop-app .signed-in-downloads{display:none}
   display:block;
   width:100%;
   height:100%;
+  max-width:100%;
+  max-height:100%;
   object-fit:contain!important;
   object-position:center;
   background:#000;
@@ -2094,6 +2096,8 @@ html.desktop-app .signed-in-downloads{display:none}
 .stream-fullscreen:hover{background:#302531;color:#ffaad2;border-color:#ff75b36b}
 .stream-card:fullscreen{width:100vw!important;height:100vh!important;border:0;border-radius:0;background:#000}
 .stream-card:fullscreen header{display:none}
+.stream-card:fullscreen .stream-video{width:100vw;height:100vh;flex:1}
+.stream-card:fullscreen .stream-fullscreen{position:fixed;right:18px;bottom:18px}
 .voice-room:has(.stream-deck) .voice-grid.with-streams{
   position:relative!important;
   inset:auto!important;
@@ -2130,6 +2134,8 @@ html.desktop-app .signed-in-downloads{display:none}
 @media(max-width:700px){
   .voice-room:has(.stream-deck){grid-template-rows:minmax(0,1fr) 80px;gap:7px;padding:7px 7px 84px}
   .voice-room:has(.stream-deck) .stream-deck{grid-template-columns:1fr;gap:7px}
+  .voice-room:has(.stream-deck) .stream-deck.focus-view{padding:0!important}
+  .voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card.focused{width:100%!important;height:100%!important}
   .voice-room:has(.stream-deck) .voice-grid.with-streams{height:80px;gap:7px}
   .voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{width:135px!important;min-width:135px!important;height:80px!important}
   .voice-room:has(.stream-deck) .voice-grid.with-streams .voice-avatar{width:40px;height:40px;font-size:12px}
