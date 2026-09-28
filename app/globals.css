@@ -2042,10 +2042,11 @@ html.desktop-app .signed-in-downloads{display:none}
 .voice-room:has(.stream-deck) .stream-deck.focus-view{display:flex!important;align-items:center;justify-content:center;padding:0 16px!important;background:#000}
 .voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card:not(.focused){display:none}
 .voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card.focused{flex:0 1 auto;width:min(100%,calc((100dvh - 280px)*1.7778))!important;height:min(100%,calc((100vw - 52px)*.5625 + 44px))!important;max-width:1180px!important;margin:auto}
-.voice-room:has(.stream-deck.tiles-view){grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:none;grid-auto-rows:minmax(220px,1fr);align-content:stretch;overflow:auto}
+.voice-room:has(.stream-deck.tiles-view){grid-template-columns:repeat(var(--call-columns),minmax(0,1fr));grid-template-rows:none;grid-auto-rows:auto;align-content:center;overflow:auto}
 .voice-room:has(.stream-deck.tiles-view) .stream-deck.tiles-view,.voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams{display:contents!important}
-.voice-room:has(.stream-deck.tiles-view) .stream-card,.voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams .voice-tile{width:100%!important;min-width:0!important;height:100%!important;max-width:none!important;max-height:none!important;margin:0;aspect-ratio:auto!important}
+.voice-room:has(.stream-deck.tiles-view) .stream-card,.voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams .voice-tile{width:100%!important;min-width:0!important;height:auto!important;max-width:none!important;max-height:none!important;margin:0;aspect-ratio:16/9!important}
 .voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams .voice-avatar{width:76px;height:76px;font-size:21px}
+.voice-invite-tile{align-content:center;gap:7px;border:1px dashed #675463!important;background:#171419!important;color:#c9c2c8!important;cursor:pointer;font:inherit;text-align:center}.voice-invite-tile:hover{border-color:#ff6caf!important;background:#2b1d27!important;color:#fff!important}.voice-invite-icon{position:static!important;width:50px;height:50px;display:grid!important;place-items:center!important;padding:0!important;border-radius:16px!important;background:#ff5ca820!important;color:#ff92c4!important}.voice-invite-tile strong{font-size:14px}.voice-invite-tile small{color:#8f8990;font-size:11px}
 .voice-room:has(.stream-deck) .stream-card{
   position:relative;
   width:100%!important;
@@ -2137,7 +2138,8 @@ html.desktop-app .signed-in-downloads{display:none}
 @media(max-width:700px){
   .voice-room:has(.stream-deck){grid-template-rows:minmax(0,1fr) 80px;gap:7px;padding:7px 7px 84px}
   .voice-room:has(.stream-deck) .stream-deck{grid-template-columns:1fr;gap:7px}
-  .voice-room:has(.stream-deck.tiles-view){grid-template-columns:1fr;grid-auto-rows:minmax(190px,38vh)}
+  .voice-room:has(.stream-deck.tiles-view){grid-template-columns:1fr;grid-auto-rows:auto;align-content:start}
+  .voice-room:has(.stream-deck.tiles-view) .stream-card,.voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams .voice-tile{max-height:none!important;aspect-ratio:16/9!important}
   .voice-room:has(.stream-deck) .stream-deck.focus-view{padding:0!important}
   .voice-room:has(.stream-deck) .stream-deck.focus-view .stream-card.focused{width:100%!important;height:100%!important}
   .voice-room:has(.stream-deck) .voice-grid.with-streams{height:80px;gap:7px}

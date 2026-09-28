@@ -602,7 +602,7 @@ export default function Aemeath({
               </button>
             </div>
           )}
-          {isVoice && channel ? <VoiceRoom channel={channel.id} name={channel.name} user={{id:user.id,name}}/> : <div className="conversation">
+          {isVoice && channel ? <VoiceRoom channel={channel.id} name={channel.name} user={{id:user.id,name}} onInvite={()=>void invite()}/> : <div className="conversation">
             {!server ? (
               <>
                 <div className="welcome">
