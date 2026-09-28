@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, ChevronDown, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MoreHorizontal, PhoneOff, PictureInPicture2, Settings, SwitchCamera, Users, X } from "lucide-react";
 import {notifyAemeath} from "@/lib/notifications";
+import {Room as LiveKitRoom,RoomEvent as LiveKitRoomEvent,Track as LiveKitTrack,type RemoteParticipant,type RemoteTrack} from "livekit-client";
 
 type Person = { id: string; name: string; reconnecting?:number|boolean; left_at?:number };
 type Signal = { id: string; from: string; body: string; created: number };
@@ -130,10 +131,20 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     peers = useRef(new Map<string, RTCPeerConnection>()), peerSlots=useRef(new Map<string,PeerSlots>()), names = useRef(new Map<string, string>()),
     pendingIce=useRef(new Map<string,RTCIceCandidateInit[]>()),seenSignals=useRef(new Set<string>()),polling=useRef(false),
     after = useRef(Date.now()), alive = useRef(true), ice = useRef<RTCIceServer[]>([]), knownMembers = useRef<Set<string> | null>(null),
-    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>()),restartAttempts=useRef(new Map<string,number>()),voiceSession=useRef(crypto.randomUUID());
+    microphoneTrack=useRef<MediaStreamTrack|null>(null),screenTrack = useRef<MediaStreamTrack | null>(null), screenAudioTrack=useRef<MediaStreamTrack|null>(null),screenAudioCleanup=useRef<(()=>void)|null>(null),cameraTrack = useRef<MediaStreamTrack | null>(null),joinedRef=useRef(false),stopSharingRef=useRef<(()=>Promise<void>)|null>(null),captureCleanup=useRef<(()=>void)|null>(null),disconnectTimers=useRef(new Map<string,ReturnType<typeof setTimeout>>()),restartAttempts=useRef(new Map<string,number>()),livekitRoom=useRef<LiveKitRoom|null>(null),sfuActive=useRef(false),voiceSession=useRef(crypto.randomUUID());
 
   const voicePost=useCallback((data:Record<string,unknown>)=>post(channel,{...data,session:voiceSession.current}),[channel]);
   const signal = useCallback((to: string, body: unknown) => voicePost({ action: "signal", to, body: JSON.stringify(body) }), [voicePost]);
+  const addLiveKitTrack=useCallback((track:RemoteTrack,participant:RemoteParticipant)=>{
+    const mediaTrack=track.mediaStreamTrack;mediaTrack.enabled=true;
+    setRemotes(old=>{const existing=old.find(remote=>remote.id===participant.identity),stream=existing?.stream||new MediaStream();if(!stream.getTracks().some(current=>current.id===mediaTrack.id))stream.addTrack(mediaTrack);return[...old.filter(remote=>remote.id!==participant.identity),{id:participant.identity,name:participant.name||participant.identity,stream}]});
+    if(mediaTrack.kind==="video")setRemoteSharing(old=>new Set(old).add(participant.identity));
+  },[]);
+  const removeLiveKitTrack=useCallback((track:RemoteTrack,participant:RemoteParticipant)=>{
+    const mediaTrack=track.mediaStreamTrack;
+    setRemotes(old=>old.map(remote=>{if(remote.id!==participant.identity)return remote;try{remote.stream.removeTrack(mediaTrack)}catch{}return remote}).filter(remote=>remote.stream.getTracks().length>0));
+    if(mediaTrack.kind==="video")setRemoteSharing(old=>{const next=new Set(old);const remote=remotes.find(item=>item.id===participant.identity);if(!remote?.stream.getVideoTracks().some(item=>item.id!==mediaTrack.id))next.delete(participant.identity);return next});
+  },[remotes]);
   const syncPeerTracks=useCallback(async()=>{
     const audio=screenAudioTrack.current||microphoneTrack.current,camera=cameraTrack.current,screen=screenTrack.current;
     await Promise.allSettled([...peerSlots.current.values()].map(async slots=>{
@@ -203,14 +214,31 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
     } else if (description.type === "answer" && pc.signalingState === "have-local-offer"){await pc.setRemoteDescription(description);for(const candidate of pendingIce.current.get(item.from)||[])try{await pc.addIceCandidate(candidate)}catch{}pendingIce.current.delete(item.from)}
   }, [makePeer, signal]);
 
+  const connectLiveKit=useCallback(async()=>{
+    const response=await fetch(`/api/livekit?channel=${encodeURIComponent(channel)}`,{cache:"no-store"}),config=await response.json() as {enabled?:boolean;url?:string;token?:string;error?:string};
+    if(!response.ok)throw new Error(config.error||"The media server is unavailable.");
+    if(!config.enabled||!config.url||!config.token)return false;
+    const room=new LiveKitRoom({adaptiveStream:true,dynacast:true,disconnectOnPageLeave:true});
+    room.on(LiveKitRoomEvent.TrackSubscribed,(track,_publication,participant)=>addLiveKitTrack(track,participant));
+    room.on(LiveKitRoomEvent.TrackUnsubscribed,(track,_publication,participant)=>removeLiveKitTrack(track,participant));
+    room.on(LiveKitRoomEvent.ParticipantDisconnected,participant=>{setRemotes(old=>old.filter(remote=>remote.id!==participant.identity));setRemoteSharing(old=>{const next=new Set(old);next.delete(participant.identity);return next})});
+    room.on(LiveKitRoomEvent.Reconnecting,()=>setError("Voice media is reconnecting through LiveKit…"));
+    room.on(LiveKitRoomEvent.Reconnected,()=>setError(current=>current.startsWith("Voice media is reconnecting")?"":current));
+    await room.connect(config.url,config.token,{autoSubscribe:true,maxRetries:5});
+    livekitRoom.current=room;sfuActive.current=true;
+    if(microphoneTrack.current)await room.localParticipant.publishTrack(microphoneTrack.current,{source:LiveKitTrack.Source.Microphone,audioPreset:{maxBitrate:192_000}});
+    await room.startAudio().catch(()=>{});
+    return true;
+  },[channel,addLiveKitTrack,removeLiveKitTrack]);
+
   const leave = useCallback(async () => {
     if (!joined && !local.current) return;
     roomTone("leave");
-    setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
+    setJoined(false);joinedRef.current=false;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
     disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach((pc) => pc.close()); peers.current.clear();peerSlots.current.clear();pendingIce.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set());setTheaterStream(""); setCamera(false); setSharing(false);
     try { await voicePost({ action: "leave" }); } catch {}
   }, [joined,voicePost]);
-  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.(); local.current?.getTracks().forEach((t) => t.stop());disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear(); peers.current.forEach((p) => p.close()); if(joinedRef.current)void voicePost({ action: "leave" }); }, [voicePost]);
+  useEffect(() => () => { alive.current = false;captureCleanup.current?.();screenAudioCleanup.current?.();void livekitRoom.current?.disconnect();local.current?.getTracks().forEach((t) => t.stop());disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear(); peers.current.forEach((p) => p.close()); if(joinedRef.current)void voicePost({ action: "leave" }); }, [voicePost]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[]);
   useEffect(()=>{const mobile=matchMedia("(pointer: coarse)").matches||navigator.maxTouchPoints>1;setMobileDevice(mobile);if(mobile)setCameraId(current=>current==="default"?"front":current);const legacy=navigator as Navigator&{getDisplayMedia?:typeof navigator.mediaDevices.getDisplayMedia};setScreenShareSupported(typeof navigator.mediaDevices?.getDisplayMedia==="function"||typeof legacy.getDisplayMedia==="function")},[]);
   useEffect(() => { if (localVideo.current) localVideo.current.srcObject = sharing&&screenTrack.current?new MediaStream([screenTrack.current]):local.current; }, [camera, sharing, joined]);
@@ -234,10 +262,12 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
           if ([...knownMembers.current].some((id) => id !== user.id && !nextMembers.has(id))) roomTone("leave");
         }
         knownMembers.current = nextMembers; setMembers(list); live.forEach((p) => names.current.set(p.id, p.name));
-        for (const item of (data.signals || []) as Signal[]){if(seenSignals.current.has(item.id))continue;await handleSignal(item);seenSignals.current.add(item.id)}
-        if(seenSignals.current.size>1000)seenSignals.current=new Set([...seenSignals.current].slice(-500));
-        for (const p of live) if (p.id !== user.id && !peers.current.has(p.id) && user.id < p.id) await offer(p);
-        await syncPeerTracks();
+        if(!sfuActive.current){
+          for (const item of (data.signals || []) as Signal[]){if(seenSignals.current.has(item.id))continue;await handleSignal(item);seenSignals.current.add(item.id)}
+          if(seenSignals.current.size>1000)seenSignals.current=new Set([...seenSignals.current].slice(-500));
+          for (const p of live) if (p.id !== user.id && !peers.current.has(p.id) && user.id < p.id) await offer(p);
+          await syncPeerTracks();
+        }
         for (const id of [...peers.current.keys()]) if (!live.some((p) => p.id === id)){closePeer(id);setRemoteSharing((old)=>{const next=new Set(old);next.delete(id);return next})}
       } catch (e) { if (alive.current) setError((e as Error).message || "Could not refresh the voice room."); }
       finally{polling.current=false}
@@ -255,7 +285,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       if(!navigator.mediaDevices?.getUserMedia){local.current=new MediaStream();listenOnly=true}
       else try { local.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation, noiseSuppression, deviceId: micId === "default" ? undefined : { exact: micId } }, video: false });microphoneTrack.current=local.current.getAudioTracks()[0]||null;if(microphoneTrack.current)microphoneTrack.current.contentHint="speech";await refreshDevices(); }
       catch(e){if(mediaPermissionDenied(e)||(e instanceof DOMException&&e.name==="NotFoundError")){local.current=new MediaStream();listenOnly=true}else throw e}
-      after.current = Date.now(); await voicePost({ action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true);joinedRef.current=true; roomTone("join");
+      after.current = Date.now();await connectLiveKit();await voicePost({ action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true);joinedRef.current=true; roomTone("join");
       setMuted(listenOnly);if(listenOnly)setError("Joined in listen-only mode. Use the microphone button when you are ready to allow access.");
     } catch (e) { setError(e instanceof Error ? e.message : "Microphone access is required to join."); local.current?.getTracks().forEach((t) => t.stop()); local.current = null; }
     finally { setBusy(false); }
@@ -263,7 +293,7 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   async function toggleMute(){
     if(!local.current)return;
     const track=microphoneTrack.current;
-    if(!track||track.readyState==="ended"){try{const media=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation,noiseSuppression,deviceId:micId==="default"?undefined:{exact:micId}},video:false}),nextTrack=media.getAudioTracks()[0];nextTrack.contentHint="speech";microphoneTrack.current=nextTrack;local.current.addTrack(nextTrack);await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.audio.replaceTrack(nextTrack);await tuneAudioSender(slot.audio)}));setMuted(false);setError("");await refreshDevices()}catch(e){setMuted(true);setError(mediaPermissionDenied(e)?"Microphone access is blocked by this browser. You are still connected in listen-only mode.":(e as Error).message)}return;}
+    if(!track||track.readyState==="ended"){try{const media=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation,noiseSuppression,deviceId:micId==="default"?undefined:{exact:micId}},video:false}),nextTrack=media.getAudioTracks()[0];nextTrack.contentHint="speech";microphoneTrack.current=nextTrack;local.current.addTrack(nextTrack);if(sfuActive.current)await livekitRoom.current?.localParticipant.publishTrack(nextTrack,{source:LiveKitTrack.Source.Microphone,audioPreset:{maxBitrate:192_000}});await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.audio.replaceTrack(nextTrack);await tuneAudioSender(slot.audio)}));setMuted(false);setError("");await refreshDevices()}catch(e){setMuted(true);setError(mediaPermissionDenied(e)?"Microphone access is blocked by this browser. You are still connected in listen-only mode.":(e as Error).message)}return;}
     const next=!muted;track.enabled=!next;setMuted(next);
   }
   async function renegotiate() { for (const p of members) if (p.id !== user.id) await offer(p); }
@@ -276,19 +306,19 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
   async function toggleCamera() {
     if (!local.current) return;
     const old = cameraTrack.current;
-    if (old) { old.stop(); local.current.removeTrack(old);cameraTrack.current=null;await Promise.all([...peerSlots.current.values()].map(slot=>slot.camera.replaceTrack(null)));await restoreMicrophoneAfterVideo();await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:sharing})));setCamera(false); return; }
-    try { const media = await navigator.mediaDevices.getUserMedia({ video: cameraConstraints(cameraId) }); const track = media.getVideoTracks()[0];track.contentHint="motion";cameraTrack.current=track; local.current.addTrack(track);await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.camera.replaceTrack(track);await tuneCameraSender(slot.camera)})); setCamera(true); await refreshDevices();await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true}))); } catch (e) { setError((e as Error).message); }
+    if (old) { if(sfuActive.current)await livekitRoom.current?.localParticipant.unpublishTrack(old,false);old.stop(); local.current.removeTrack(old);cameraTrack.current=null;await Promise.all([...peerSlots.current.values()].map(slot=>slot.camera.replaceTrack(null)));await restoreMicrophoneAfterVideo();if(!sfuActive.current)await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:sharing})));setCamera(false); return; }
+    try { const media = await navigator.mediaDevices.getUserMedia({ video: cameraConstraints(cameraId) }); const track = media.getVideoTracks()[0];track.contentHint="motion";cameraTrack.current=track; local.current.addTrack(track);if(sfuActive.current)await livekitRoom.current?.localParticipant.publishTrack(track,{source:LiveKitTrack.Source.Camera,simulcast:true});await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.camera.replaceTrack(track);await tuneCameraSender(slot.camera)})); setCamera(true); await refreshDevices();if(!sfuActive.current)await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true}))); } catch (e) { setError((e as Error).message); }
   }
   async function changeMicrophone(id: string) {
     setMicId(id); if (!local.current) return;
-    try { const media=await navigator.mediaDevices.getUserMedia({audio:{deviceId:id==="default"?undefined:{exact:id},echoCancellation,noiseSuppression},video:false}), next=media.getAudioTracks()[0], old=microphoneTrack.current;next.contentHint="speech"; if(old)local.current.removeTrack(old); old?.stop();microphoneTrack.current=next; local.current.addTrack(next); await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.audio.replaceTrack(next);await tuneAudioSender(slot.audio)})); } catch(e){setError(mediaPermissionDenied(e)?"Microphone access is blocked by this browser.":(e as Error).message);}
+    try { const media=await navigator.mediaDevices.getUserMedia({audio:{deviceId:id==="default"?undefined:{exact:id},echoCancellation,noiseSuppression},video:false}), next=media.getAudioTracks()[0], old=microphoneTrack.current;next.contentHint="speech";if(old&&sfuActive.current)await livekitRoom.current?.localParticipant.unpublishTrack(old,false);if(old)local.current.removeTrack(old); old?.stop();microphoneTrack.current=next; local.current.addTrack(next);if(sfuActive.current)await livekitRoom.current?.localParticipant.publishTrack(next,{source:LiveKitTrack.Source.Microphone,audioPreset:{maxBitrate:192_000}}); await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.audio.replaceTrack(next);await tuneAudioSender(slot.audio)})); } catch(e){setError(mediaPermissionDenied(e)?"Microphone access is blocked by this browser.":(e as Error).message);}
   }
   async function changeCamera(id: string) {
     setCameraId(id);if(!camera||!local.current)return;const old=cameraTrack.current,mobileFacing=id==="front"||id==="rear";
     try{
-      if(mobileFacing&&old){local.current.removeTrack(old);old.stop();cameraTrack.current=null;await Promise.all([...peerSlots.current.values()].map(slot=>slot.camera.replaceTrack(null)))}
+      if(mobileFacing&&old){if(sfuActive.current)await livekitRoom.current?.localParticipant.unpublishTrack(old,false);local.current.removeTrack(old);old.stop();cameraTrack.current=null;await Promise.all([...peerSlots.current.values()].map(slot=>slot.camera.replaceTrack(null)))}
       const media=await navigator.mediaDevices.getUserMedia({video:cameraConstraints(id),audio:false}),next=media.getVideoTracks()[0];next.contentHint="motion";
-      if(old&&!mobileFacing){local.current.removeTrack(old);old.stop()}cameraTrack.current=next;local.current.addTrack(next);await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.camera.replaceTrack(next);await tuneCameraSender(slot.camera)}));setCamera(true);setError("");
+      if(old&&!mobileFacing){if(sfuActive.current)await livekitRoom.current?.localParticipant.unpublishTrack(old,false);local.current.removeTrack(old);old.stop()}cameraTrack.current=next;local.current.addTrack(next);if(sfuActive.current)await livekitRoom.current?.localParticipant.publishTrack(next,{source:LiveKitTrack.Source.Camera,simulcast:true});await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.camera.replaceTrack(next);await tuneCameraSender(slot.camera)}));setCamera(true);setError("");
     }catch(e){if(mobileFacing)setCamera(false);setError((e as Error).message)}
   }
   async function switchMobileCamera(){await changeCamera(cameraId==="rear"?"front":"rear")}
@@ -305,11 +335,11 @@ export default function VoiceRoom({ channel, name, user }: { channel: string; na
       const stabilized=await stableCapture(media,fps,captured.width||size.width,captured.height||size.height),track=stabilized.track;captureCleanup.current=()=>{stabilized.stop();media.getTracks().forEach((t)=>t.stop())};screenTrack.current=track;
       if(displayAudio){const mixed=mixShareAudio(microphoneTrack.current,displayAudio);screenAudioTrack.current=mixed.track;screenAudioCleanup.current=mixed.stop;setError("")}else{screenAudioTrack.current=null;screenAudioCleanup.current=null;setError("This capture source did not provide audio. Choose a browser tab and enable Share tab audio, or choose Entire Screen with system audio.")}
       const outgoingAudio=screenAudioTrack.current;
-      const restore=async()=>{if(screenTrack.current!==track)return;roomTone("stream-stop");screenTrack.current=null;screenAudioTrack.current=null;stopSharingRef.current=null;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;local.current?.removeTrack(track);setSharing(false);setStreamMenu(false);setTheaterStream("");const camera=cameraTrack.current,microphone=microphoneTrack.current;await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:!!camera&&camera.readyState==="live"})));await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.screen.replaceTrack(null);await slot.audio.replaceTrack(microphone&&microphone.readyState==="live"?microphone:null);await tuneAudioSender(slot.audio)}));track.stop();displayAudio?.stop();setLocalPreview();};
+      const restore=async()=>{if(screenTrack.current!==track)return;roomTone("stream-stop");if(sfuActive.current){await livekitRoom.current?.localParticipant.unpublishTrack(track,false);if(displayAudio)await livekitRoom.current?.localParticipant.unpublishTrack(displayAudio,false)}screenTrack.current=null;screenAudioTrack.current=null;stopSharingRef.current=null;captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;local.current?.removeTrack(track);setSharing(false);setStreamMenu(false);setTheaterStream("");const camera=cameraTrack.current,microphone=microphoneTrack.current;if(!sfuActive.current)await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:!!camera&&camera.readyState==="live"})));await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.screen.replaceTrack(null);await slot.audio.replaceTrack(microphone&&microphone.readyState==="live"?microphone:null);await tuneAudioSender(slot.audio)}));track.stop();displayAudio?.stop();setLocalPreview();};
       stopSharingRef.current=restore;
       sourceTrack.addEventListener("ended",()=>{void restore()},{once:true});
-      local.current.addTrack(track);await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.screen.replaceTrack(track);if(outgoingAudio)await slot.audio.replaceTrack(outgoingAudio);await tuneAudioSender(slot.audio);await tuneVideoSender(slot.screen,fps,streamQuality)}));
-      setSharing(true);roomTone("stream-start");setLocalPreview(media);await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true})));
+      local.current.addTrack(track);if(sfuActive.current){await livekitRoom.current?.localParticipant.publishTrack(track,{source:LiveKitTrack.Source.ScreenShare,simulcast:true});if(displayAudio)await livekitRoom.current?.localParticipant.publishTrack(displayAudio,{source:LiveKitTrack.Source.ScreenShareAudio})}await Promise.all([...peerSlots.current.values()].map(async slot=>{await slot.screen.replaceTrack(track);if(outgoingAudio)await slot.audio.replaceTrack(outgoingAudio);await tuneAudioSender(slot.audio);await tuneVideoSender(slot.screen,fps,streamQuality)}));
+      setSharing(true);roomTone("stream-start");setLocalPreview(media);if(!sfuActive.current)await Promise.all(members.filter((p)=>p.id!==user.id).map((p)=>signal(p.id,{type:"stream-state",active:true})));
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
   function setLocalPreview(stream:MediaStream|null=local.current){if(localVideo.current)localVideo.current.srcObject=stream}

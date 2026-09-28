@@ -40,7 +40,7 @@ Requirements: Node.js 22.13 or newer and a PostgreSQL database such as Neon.
 
 ## Environment variables
 
-The application needs `DATABASE_URL` for PostgreSQL. TURN credentials are optional but strongly recommended for reliable calls across mobile networks, restrictive Wi-Fi, and different NATs. See [.env.example](.env.example) for the available names.
+The application needs `DATABASE_URL` for PostgreSQL. Set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` to route group voice, camera, and screen sharing through LiveKit's SFU. TURN credentials remain available as a fallback for direct calls. See [.env.example](.env.example) for the available names.
 
 Set `RESEND_API_KEY` and `AUTH_EMAIL_FROM` to require a six-digit email code before account creation and after every successful password login. Codes expire after 10 minutes and lock after five incorrect attempts. Without both variables, the existing password flow remains available so a missing mail configuration cannot lock out every account.
 
