@@ -6,6 +6,18 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 type NoticeKind = "call" | "message" | "join";
 let prepared = false;
 let audio: AudioContext | null = null;
+const notificationPromptKey = "aemeath.notifications.prompted.v1";
+
+function notificationPromptRemembered() {
+  try {
+    return localStorage.getItem(notificationPromptKey) === "1" || document.cookie.split(";").some((part) => part.trim().startsWith(`${notificationPromptKey}=`));
+  } catch { return false; }
+}
+
+function rememberNotificationPrompt() {
+  try { localStorage.setItem(notificationPromptKey, "1"); } catch {}
+  try { document.cookie = `${notificationPromptKey}=1; Max-Age=31536000; Path=/; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`; } catch {}
+}
 
 function noticeId(key: string) {
   let hash = 0;
@@ -18,12 +30,19 @@ export async function prepareNotifications() {
   prepared = true;
   try {
     if (Capacitor.isNativePlatform()) {
-      await LocalNotifications.requestPermissions();
+      const current = await LocalNotifications.checkPermissions();
+      if (current.display !== "granted" && !notificationPromptRemembered()) {
+        rememberNotificationPrompt();
+        await LocalNotifications.requestPermissions();
+      }
+      const permission = await LocalNotifications.checkPermissions();
+      if (permission.display !== "granted") return;
       await LocalNotifications.createChannel({id:"aemeath-events",name:"Calls and messages",description:"Incoming calls, new messages, and voice-room activity",importance:5,visibility:1,vibration:true,sound:"default"});
-    } else if ("Notification" in window && Notification.permission === "default") {
+    } else if ("Notification" in window && Notification.permission === "default" && !notificationPromptRemembered()) {
+      rememberNotificationPrompt();
       await Notification.requestPermission();
     }
-  } catch { prepared = false; }
+  } catch { /* A failed or dismissed prompt stays remembered instead of interrupting every visit. */ }
 }
 
 export function armNotifications() {
