@@ -2113,6 +2113,8 @@ html.desktop-app .signed-in-downloads{display:none}
   overflow-x:auto;
   overflow-y:hidden;
 }
+.voice-room:has(.stream-deck):has(.voice-grid.with-streams:empty){grid-template-rows:minmax(0,1fr) 0;gap:0}
+.voice-room:has(.stream-deck) .voice-grid.with-streams:empty{display:none!important}
 .voice-room:has(.stream-deck) .voice-grid.with-streams .voice-tile{
   position:relative;
   inset:auto;
