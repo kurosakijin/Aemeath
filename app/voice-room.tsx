@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, CameraOff, ChevronDown, LayoutGrid, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MoreHorizontal, PhoneOff, PictureInPicture2, Settings, SwitchCamera, UserPlus, Users, X } from "lucide-react";
+import { AppWindow, Camera, CameraOff, ChevronDown, LayoutGrid, Maximize2, Mic, MicOff, Minimize2, Monitor, MonitorUp, MoreHorizontal, PhoneOff, PictureInPicture2, Settings, SwitchCamera, UserPlus, Users, X } from "lucide-react";
 import {notifyAemeath} from "@/lib/notifications";
 import {Room as LiveKitRoom,RoomEvent as LiveKitRoomEvent,Track as LiveKitTrack,type RemoteAudioTrack,type RemoteParticipant,type RemoteTrack} from "livekit-client";
 
@@ -8,7 +8,9 @@ type Person = { id: string; name: string; reconnecting?:number|boolean; left_at?
 type Signal = { id: string; from: string; body: string; created: number };
 type Remote = Person & { stream: MediaStream };
 type DeviceOption = { deviceId: string; label: string };
-type StreamQuality = "1080" | "1440";
+type StreamQuality = "720" | "1080" | "1440";
+type DesktopSource={id:string;name:string;type:"window"|"screen";thumbnail:string;icon:string};
+type DesktopBridge={getCaptureSources:()=>Promise<DesktopSource[]>;selectCaptureSource:(id:string)=>Promise<boolean>};
 type PeerSlots = { audio:RTCRtpSender; camera:RTCRtpSender; screen:RTCRtpSender };
 function mediaPermissionDenied(error:unknown){const value=error as {name?:string;message?:string};return ["NotAllowedError","PermissionDeniedError","SecurityError"].includes(value?.name||"")||/permission|denied|not allowed|blocked/i.test(value?.message||String(error))}
 async function finishIce(pc:RTCPeerConnection,timeoutMs=1800){if(pc.iceGatheringState==="complete")return;await new Promise<void>(resolve=>{const done=()=>{clearTimeout(timer);pc.removeEventListener("icegatheringstatechange",change);resolve()},change=()=>{if(pc.iceGatheringState==="complete")done()},timer=setTimeout(done,timeoutMs);pc.addEventListener("icegatheringstatechange",change)})}
@@ -113,7 +115,7 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
     [echoCancellation, setEchoCancellation] = useState(true), [noiseSuppression, setNoiseSuppression] = useState(true),
     [sensitivity, setSensitivity] = useState(55), [remoteSharing, setRemoteSharing] = useState<Set<string>>(new Set()),
     [streamFps,setStreamFps]=useState(60),
-    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080"),[clock,setClock]=useState(Date.now()),[mobileDevice,setMobileDevice]=useState(false),[screenShareSupported,setScreenShareSupported]=useState(false),[takenOver,setTakenOver]=useState(false),[mediaTransport,setMediaTransport]=useState<"mesh"|"livekit">("mesh"),[speakingIds,setSpeakingIds]=useState<Set<string>>(new Set());
+    [streamQuality,setStreamQuality]=useState<StreamQuality>("1080"),[clock,setClock]=useState(Date.now()),[mobileDevice,setMobileDevice]=useState(false),[screenShareSupported,setScreenShareSupported]=useState(false),[takenOver,setTakenOver]=useState(false),[mediaTransport,setMediaTransport]=useState<"mesh"|"livekit">("mesh"),[speakingIds,setSpeakingIds]=useState<Set<string>>(new Set()),[desktopSources,setDesktopSources]=useState<DesktopSource[]>([]),[sourceTab,setSourceTab]=useState<"window"|"screen">("window"),[sourcePicker,setSourcePicker]=useState(false),[sourceLoading,setSourceLoading]=useState(false);
   const [streamMenu,setStreamMenu]=useState(false),[streamLayout,setStreamLayout]=useState<"focus"|"tiles">("tiles"),[focusedStream,setFocusedStream]=useState("");
   const local = useRef<MediaStream | null>(null), localVideo = useRef<HTMLVideoElement>(null),
     peers = useRef(new Map<string, RTCPeerConnection>()), peerSlots=useRef(new Map<string,PeerSlots>()), names = useRef(new Map<string, string>()),
@@ -316,13 +318,17 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
     }catch(e){if(mobileFacing)setCamera(false);setError((e as Error).message)}
   }
   async function switchMobileCamera(){await changeCamera(cameraId==="rear"?"front":"rear")}
-  async function shareScreen() {
+  async function openDesktopPicker(){const bridge=(window as typeof window&{aemeathDesktop?:DesktopBridge}).aemeathDesktop;if(!bridge)return false;setSourceLoading(true);setSourcePicker(true);try{const sources=await bridge.getCaptureSources();setDesktopSources(sources);if(!sources.some(item=>item.type===sourceTab))setSourceTab(sources.some(item=>item.type==="screen")?"screen":"window")}catch(e){setSourcePicker(false);setError((e as Error).message)}finally{setSourceLoading(false)}return true}
+  async function shareScreen(sourceId?:string) {
     if (!local.current || screenTrack.current) return;
     try {
       setError("");
+      const desktopBridge=(window as typeof window&{aemeathDesktop?:DesktopBridge}).aemeathDesktop;
+      if(desktopBridge&&!sourceId){await openDesktopPicker();return}
+      if(desktopBridge&&sourceId){const selected=await desktopBridge.selectCaptureSource(sourceId);if(!selected)throw new Error("That window is no longer available.");setSourcePicker(false)}
       const legacy=navigator as Navigator&{getDisplayMedia?:(constraints?:DisplayMediaStreamOptions)=>Promise<MediaStream>},capture=typeof navigator.mediaDevices?.getDisplayMedia==="function"?navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices):typeof legacy.getDisplayMedia==="function"?legacy.getDisplayMedia.bind(navigator):null;
       if(!capture){setStreamMenu(false);if(!camera)await toggleCamera();throw new Error("Screen sharing is unavailable in this mobile browser, so Aemeath opened your camera instead.");}
-      const size=mobileDevice?{width:Math.max(screen.width,720),height:Math.max(screen.height,1280)}:streamQuality==="1440"?{width:2560,height:1440}:{width:1920,height:1080},fps=mobileDevice?Math.min(streamFps,60):streamFps;
+      const size=mobileDevice?{width:Math.max(screen.width,720),height:Math.max(screen.height,1280)}:streamQuality==="1440"?{width:2560,height:1440}:streamQuality==="720"?{width:1280,height:720}:{width:1920,height:1080},fps=mobileDevice?Math.min(streamFps,60):streamFps;
       const displayOptions=mobileDevice?{video:true,audio:false}:{video:{width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:fps,max:fps}},audio:true,surfaceSwitching:"include",systemAudio:"include"} as DisplayMediaStreamOptions;
       const media=await capture(displayOptions),sourceTrack=media.getVideoTracks()[0],displayAudio=media.getAudioTracks()[0]||null;
       if(!mobileDevice)await sourceTrack.applyConstraints({width:{ideal:size.width,max:size.width},height:{ideal:size.height,max:size.height},frameRate:{ideal:fps,max:fps}}).catch(()=>{});
@@ -341,6 +347,7 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
   useEffect(()=>{if(!hasStreams){setStreamLayout("tiles");setFocusedStream("")}},[hasStreams]);
   return <section className={`voice-room${joined?" joined":""}${joined&&!hasStreams?" no-streams":""}`} style={{"--voice-columns":columns,"--voice-rows":rows,"--call-columns":callColumns,"--call-rows":callRows,"--call-count":callTileCount} as React.CSSProperties}>
     {takenOver&&<div className="voice-takeover" role="alert"><span>Your voice has been disconnected because you connected at another location.</span><button onClick={()=>void join()} disabled={busy}>{busy?"Reconnecting…":"Reconnect"}</button><button className="dismiss" aria-label="Dismiss" onClick={()=>setTakenOver(false)}><X size={18}/></button></div>}
+    {sourcePicker&&<div className="desktop-stream-backdrop" onClick={()=>setSourcePicker(false)}><div className="desktop-stream-picker" role="dialog" aria-modal="true" aria-label="Choose what to stream" onClick={event=>event.stopPropagation()}><header><div><MonitorUp/><span><strong>Share your screen</strong><small>Choose a window or display to stream</small></span></div><button aria-label="Close stream picker" onClick={()=>setSourcePicker(false)}><X/></button></header><nav><button className={sourceTab==="window"?"active":""} onClick={()=>setSourceTab("window")}><AppWindow/> Applications</button><button className={sourceTab==="screen"?"active":""} onClick={()=>setSourceTab("screen")}><Monitor/> Entire screen</button></nav><div className="desktop-source-grid">{sourceLoading?<p>Finding shareable windows…</p>:desktopSources.filter(source=>source.type===sourceTab).map(source=><button key={source.id} onClick={()=>void shareScreen(source.id)}><span className="desktop-source-preview"><img src={source.thumbnail} alt=""/></span><strong>{source.icon&&<img src={source.icon} alt=""/>}{source.name}</strong></button>)}</div><footer><div><strong>Stream quality</strong><span>{streamQuality}p · {streamFps} FPS</span></div><div className="desktop-quality"><button className={streamQuality==="720"?"active":""} onClick={()=>setStreamQuality("720")}>720p</button><button className={streamQuality==="1080"?"active":""} onClick={()=>setStreamQuality("1080")}>1080p</button><button className={streamQuality==="1440"?"active":""} onClick={()=>setStreamQuality("1440")}>1440p</button><button className={streamFps===30?"active":""} onClick={()=>setStreamFps(30)}>30 FPS</button><button className={streamFps===60?"active":""} onClick={()=>setStreamFps(60)}>60 FPS</button></div></footer></div></div>}
     {!joined ? <div className="voice-empty"><div className="voice-orb"><VolumeIcon /></div><h1>{name}</h1><p>{members.filter(m=>!m.reconnecting).length?`${members.filter(m=>!m.reconnecting).length} ${members.filter(m=>!m.reconnecting).length===1?"person is":"people are"} in voice`:"No one is currently in voice"}</p>{members.length>0&&<div className="voice-waiting-members">{members.map((person)=>{const remaining=person.reconnecting?Math.max(0,10-Math.floor((clock-Number(person.left_at||clock))/1000)):0;return <div key={person.id}><span>{person.name.slice(0,2).toUpperCase()}</span><strong>{person.name}</strong><i className={person.reconnecting?"reconnecting":""}>{person.reconnecting?`Reconnecting · ${remaining}s`:"Connected"}</i></div>})}</div>}<button className="voice-join" disabled={busy} onClick={join}>{busy ? "Joining…" : members.some(m=>m.id===user.id&&m.reconnecting)?"Rejoin Voice":"Join Voice"}</button></div> : <>
       {(sharing||camera||remoteSharing.size>0)&&<div className={`stream-deck ${streamLayout}-view`}>
         {streamLayout==="focus"&&<div className="stream-layout-switch" aria-label="Stream layout"><button aria-label="Show tiled call view" title="Tile view" onClick={()=>setStreamLayout("tiles")}><LayoutGrid size={17}/></button></div>}

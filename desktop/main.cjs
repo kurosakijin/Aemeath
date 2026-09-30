@@ -6,7 +6,7 @@ log.initialize();
 
 const APP_URL = process.env.AEMEATH_APP_URL || "https://aemeath-tau.vercel.app/";
 const APP_ORIGIN = new URL(APP_URL).origin;
-let mainWindow, tray, quitting = false;
+let mainWindow, tray, quitting = false, selectedCaptureSourceId = "";
 
 function trusted(url) {
   try { return new URL(url).origin === APP_ORIGIN; } catch { return false; }
@@ -43,7 +43,9 @@ function configureMediaPermissions() {
   ses.setDisplayMediaRequestHandler(async (request, callback) => {
     try {
       if (!trusted(request.securityOrigin || request.frame?.url || "")) return callback({});
-      const source = await chooseDesktopSource();
+      const sources=await desktopCapturer.getSources({types:["screen","window"],thumbnailSize:{width:480,height:270},fetchWindowIcons:true});
+      const source=sources.find(item=>item.id===selectedCaptureSourceId)||await chooseDesktopSource();
+      selectedCaptureSourceId="";
       if (!source) return callback({});
       callback({ video: source, audio: process.platform === "win32" ? "loopback" : undefined });
     } catch {
@@ -120,6 +122,8 @@ ipcMain.on("aemeath:window",(event,action)=>{
   else if(action==="close")mainWindow.close();
 });
 ipcMain.on("aemeath:check-update",event=>{if(mainWindow&&event.sender===mainWindow.webContents)void checkForUpdates(true)});
+ipcMain.handle("aemeath:capture-sources",async event=>{if(!mainWindow||event.sender!==mainWindow.webContents)return[];const sources=await desktopCapturer.getSources({types:["screen","window"],thumbnailSize:{width:480,height:270},fetchWindowIcons:true});return sources.map(source=>({id:source.id,name:source.name,type:source.id.startsWith("screen:")?"screen":"window",thumbnail:source.thumbnail.toDataURL(),icon:source.appIcon&&!source.appIcon.isEmpty()?source.appIcon.toDataURL():""}))});
+ipcMain.handle("aemeath:select-capture",(event,id)=>{if(!mainWindow||event.sender!==mainWindow.webContents)return false;selectedCaptureSourceId=String(id||"");return true});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
