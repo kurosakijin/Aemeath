@@ -29,6 +29,10 @@ import {
   PanelRightClose,
   Bell,
   Shield,
+  Crown,
+  UserRound,
+  UserMinus,
+  AtSign,
   ImagePlus,
   Eye,
   EyeOff,
@@ -119,6 +123,7 @@ export default function Aemeath({
     [mobile, setMobile] = useState(false),
     [showMembers, setShowMembers] = useState(true),
     [mobileMembers, setMobileMembers] = useState(false);
+  const [memberProfile,setMemberProfile]=useState<Member|null>(null),[memberContext,setMemberContext]=useState<{member:Member;x:number;y:number}|null>(null);
   const [voiceChat, setVoiceChat] = useState(false);
   const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
   const [invitePreview,setInvitePreview]=useState<InvitePreview|null>(null),[inviteLoading,setInviteLoading]=useState(false);
@@ -143,6 +148,7 @@ export default function Aemeath({
     voiceChannel = activeVoice||((isVoice&&channel&&server)?{id:channel.id,name:channel.name,serverId:server.id,serverName:server.name}:null),
     owner = server?.owner === user?.id,
     manager = owner || server?.membership_role === "admin";
+  useEffect(()=>{if(!memberContext)return;const close=()=>setMemberContext(null),key=(event:KeyboardEvent)=>{if(event.key==="Escape")close()};window.addEventListener("click",close);window.addEventListener("resize",close);window.addEventListener("keydown",key);return()=>{window.removeEventListener("click",close);window.removeEventListener("resize",close);window.removeEventListener("keydown",key)}},[memberContext]);
   const open = (type: string) => {
     setFormError("");
     setField(type === "profile" ? name : "");
@@ -813,16 +819,11 @@ export default function Aemeath({
           </div>
           {members.length ? (
             members.map((m) => (
-              <div className="member" key={m.id}>
-                <div className="avatar">{initials(m.name || "Member")}</div>
-                <div className="member-name">
-                  {m.name || "Member"}
-                  <small>
-                    {m.role==="owner"?"Server owner":m.role==="admin"?"Administrator":"Member"}
-                    {m.id === user?.id ? " · You" : ""}
-                  </small>
-                </div>
-              </div>
+              <button className="member" key={m.id} onClick={()=>setMemberProfile(m)} onContextMenu={event=>{event.preventDefault();event.stopPropagation();setMemberProfile(null);setMemberContext({member:m,x:Math.min(event.clientX,window.innerWidth-224),y:Math.min(event.clientY,window.innerHeight-310)})}}>
+                <span className="member-avatar"><span className="avatar">{initials(m.name || "Member")}</span><i className={voiceMembers.some(person=>person.id===m.id&&!Number(person.left_at))||m.id===user.id?"":"idle"}/></span>
+                <span className="member-name"><strong>{m.name || "Member"}</strong><small>{voiceMembers.find(person=>person.id===m.id&&!Number(person.left_at))?`In ${channels.find(item=>item.id===voiceMembers.find(person=>person.id===m.id)?.channel)?.name||"voice"}`:m.id===user.id?"Online · You":m.role==="owner"?"Server owner":m.role==="admin"?"Administrator":"Member"}</small></span>
+                <span className={`member-role-icon ${m.role||"member"}`} title={m.role==="owner"?"Server owner":m.role==="admin"?"Administrator":"Member"}>{m.role==="owner"?<Crown size={13}/>:m.role==="admin"?<Shield size={13}/>:null}</span>
+              </button>
             ))
           ) : (
             <div className="circle-empty">
@@ -844,7 +845,9 @@ export default function Aemeath({
               Your servers and conversations are only for the people you invite.
             </p>
           </div>
+          {memberProfile&&<div className="member-profile-card"><button className="member-profile-close" aria-label="Close member profile" onClick={()=>setMemberProfile(null)}><X size={16}/></button><div className="member-profile-banner"/><div className="member-profile-avatar"><span>{initials(memberProfile.name||"Member")}</span><i className={voiceMembers.some(person=>person.id===memberProfile.id&&!Number(person.left_at))||memberProfile.id===user.id?"":"idle"}/></div><h3>{memberProfile.name||"Member"}</h3><p>{memberProfile.id===user.id?"This is you":voiceMembers.some(person=>person.id===memberProfile.id&&!Number(person.left_at))?"Currently in a voice lobby":memberProfile.role==="owner"?"Server owner":memberProfile.role==="admin"?"Server administrator":"Server member"}</p><div className="member-profile-meta"><span><strong>Role</strong>{memberProfile.role==="owner"?"Server owner":memberProfile.role==="admin"?"Administrator":"Member"}</span><span><strong>Member since</strong>{memberProfile.joined?new Date(Number(memberProfile.joined)).toLocaleDateString():"Member"}</span></div>{memberProfile.id!==user.id&&<button className="member-profile-mention" onClick={()=>{setDraft(current=>`${current}${current&&!current.endsWith(" ")?" ":""}@${memberProfile.name} `);if(isVoice)setVoiceChat(true);setMemberProfile(null)}}><AtSign size={15}/> Mention</button>}</div>}
         </aside>
+        {memberContext&&<div className="member-context-menu" style={{left:memberContext.x,top:memberContext.y}} onClick={event=>event.stopPropagation()} role="menu"><button onClick={()=>{setMemberProfile(memberContext.member);setMemberContext(null)}}><UserRound size={16}/> Profile</button>{memberContext.member.id!==user.id&&<button onClick={()=>{setDraft(current=>`${current}${current&&!current.endsWith(" ")?" ":""}@${memberContext.member.name} `);if(isVoice)setVoiceChat(true);setMemberContext(null)}}><AtSign size={16}/> Mention</button>}<div/><button disabled={!owner||memberContext.member.role==="owner"} onClick={()=>void(async()=>{try{await api("",{action:"set-member-role",server:selected,user:memberContext.member.id,role:memberContext.member.role==="admin"?"member":"admin"});const updated=await api("?server="+encodeURIComponent(selected));setMembers(updated.members);setMemberContext(null)}catch(e){setError((e as Error).message)}})()}><Shield size={16}/> {memberContext.member.role==="admin"?"Remove admin":"Make admin"}</button>{manager&&<button onClick={()=>{setMemberContext(null);setModal("server-settings")}}><Settings size={16}/> Open in Mod View</button>}<div/><button onClick={()=>{void navigator.clipboard.writeText(memberContext.member.id);setMemberContext(null)}}><Copy size={16}/> Copy User ID</button>{manager&&memberContext.member.id!==user.id&&memberContext.member.role!=="owner"&&<button className="danger" onClick={()=>void(async()=>{try{await api("",{action:"remove-member",server:selected,user:memberContext.member.id});setMembers(old=>old.filter(item=>item.id!==memberContext.member.id));setMemberContext(null)}catch(e){setError((e as Error).message)}})()}><UserMinus size={16}/> Remove from server</button>}</div>}
       </div>
       <Dialog
         open={!!modal}
