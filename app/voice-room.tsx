@@ -5,7 +5,7 @@ import {notifyAemeath} from "@/lib/notifications";
 import {Room as LiveKitRoom,RoomEvent as LiveKitRoomEvent,Track as LiveKitTrack,type RemoteAudioTrack,type RemoteParticipant,type RemoteTrack} from "livekit-client";
 
 type Person = { id: string; name: string; reconnecting?:number|boolean; left_at?:number };
-export type VoiceControls={muted:boolean;deafened:boolean;toggleMute:()=>void;toggleDeafen:()=>void};
+export type VoiceControls={muted:boolean;deafened:boolean;camera:boolean;sharing:boolean;toggleMute:()=>void;toggleDeafen:()=>void;toggleCamera:()=>void;toggleShare:()=>void;invite:()=>void;leave:()=>void};
 type Signal = { id: string; from: string; body: string; created: number };
 type Remote = Person & { stream: MediaStream };
 type DeviceOption = { deviceId: string; label: string };
@@ -354,7 +354,7 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
   function setLocalPreview(stream:MediaStream|null=local.current){if(localVideo.current)localVideo.current.srcObject=stream}
-  useEffect(()=>{if(joined)onVoiceControls({muted,deafened,toggleMute:()=>void toggleMute(),toggleDeafen});else onVoiceControls(null)},[joined,muted,deafened]);
+  useEffect(()=>{if(joined)onVoiceControls({muted,deafened,camera,sharing,toggleMute:()=>void toggleMute(),toggleDeafen,toggleCamera:()=>void toggleCamera(),toggleShare:()=>sharing?void stopSharingRef.current?.():void shareScreen(),invite:onInvite,leave:()=>void leave()});else onVoiceControls(null)},[joined,muted,deafened,camera,sharing]);
   const visibleMembers=members.filter(member=>!member.reconnecting),participantCount=Math.min(30,Math.max(1,visibleMembers.length)),columns=participantCount<=9?3:participantCount<=16?4:participantCount<=25?5:6,rows=participantCount<=9?3:participantCount<=16?4:5,hasStreams=sharing||camera||remoteSharing.size>0,remoteStreamIds=remotes.filter(remote=>remoteSharing.has(remote.id)).flatMap(remote=>remote.stream.getVideoTracks().map(track=>`${remote.id}-${track.id}`)),streamIds=[...(sharing?[`${user.id}-screen`]:[]),...(camera?[`${user.id}-camera`]:[]),...remoteStreamIds],activeStream=streamIds.includes(focusedStream)?focusedStream:streamIds[0]||"",callTileCount=Math.min(31,streamIds.length+visibleMembers.length+1),callColumns=callTileCount===1?1:callTileCount<=4?2:callTileCount<=9?3:4,callRows=Math.ceil(callTileCount/callColumns);
   useEffect(()=>{if(!hasStreams){setStreamLayout("tiles");setFocusedStream("")}},[hasStreams]);
   return <section className={`voice-room${joined?" joined":""}${joined&&!hasStreams?" no-streams":""}`} data-transport={mediaTransport} style={{"--voice-columns":columns,"--voice-rows":rows,"--call-columns":callColumns,"--call-rows":callRows,"--call-count":callTileCount} as React.CSSProperties}>

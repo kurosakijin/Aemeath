@@ -26,6 +26,12 @@ import {
   Headphones,
   Copy,
   Mail,
+  Camera,
+  CameraOff,
+  MonitorUp,
+  UserPlus,
+  PhoneOff,
+  LayoutGrid,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -125,6 +131,7 @@ function Inbox({
   const calls = useCalls();
   useEffect(()=>{if(!profileOpen)return;const close=(event:PointerEvent)=>{if(!profileCard.current?.contains(event.target as Node)&&!(event.target as Element).closest?.(".user-profile-trigger"))setProfileOpen(false)},key=(event:KeyboardEvent)=>{if(event.key==="Escape")setProfileOpen(false)};document.addEventListener("pointerdown",close);document.addEventListener("keydown",key);return()=>{document.removeEventListener("pointerdown",close);document.removeEventListener("keydown",key)}},[profileOpen]);
   const conversation = conversations.find((c) => c.id === selected);
+  const returnToVoice=()=>{if(!voiceStatus)return;writeNavigationMemory(user.id,{view:"server",server:voiceStatus.serverId,channel:voiceStatus.channelId});setServerView(voiceStatus.serverId)};
   useEffect(()=>{const saved=readNavigationMemory(user.id);if(saved?.view==="server"&&saved.server)setServerView(saved.server);else if(saved?.view==="direct"&&saved.conversation)setSelected(saved.conversation);setNavigationReady(true)},[user.id]);
   const refresh = useCallback(async () => {
     const [d, s] = await Promise.all([
@@ -709,11 +716,12 @@ function Inbox({
       </SidebarProvider>
       </div>
       {voiceStatus&&<div className="global-voice-status">
-        <button className="global-voice-return" onClick={()=>{writeNavigationMemory(user.id,{view:"server",server:voiceStatus.serverId,channel:voiceStatus.channelId});setServerView(voiceStatus.serverId)}} aria-label={`Return to ${voiceStatus.channelName} voice channel`}>
+        <button className="global-voice-return" onClick={returnToVoice} aria-label={`Return to ${voiceStatus.channelName} voice channel`}>
           <span className="global-voice-status-icon"><Volume2 size={18}/></span>
           <span><strong>Voice Connected</strong><small>{voiceStatus.serverName} / {voiceStatus.channelName}</small></span>
         </button>
-        <span className="global-voice-actions"><button className={voiceStatus.muted?"off":""} aria-label={voiceStatus.muted?"Unmute microphone":"Mute microphone"} title={voiceStatus.muted?"Unmute":"Mute"} onClick={voiceStatus.toggleMute}>{voiceStatus.muted?<MicOff size={17}/>:<Mic size={17}/>}</button><button className={voiceStatus.deafened?"off":""} aria-label={voiceStatus.deafened?"Undeafen":"Deafen"} title={voiceStatus.deafened?"Undeafen":"Deafen"} onClick={voiceStatus.toggleDeafen}>{voiceStatus.deafened?<VolumeX size={17}/>:<Headphones size={17}/>}</button></span>
+        <span className="global-voice-actions"><button className={voiceStatus.muted?"off":""} aria-label={voiceStatus.muted?"Unmute microphone":"Mute microphone"} title={voiceStatus.muted?"Unmute":"Mute"} onClick={voiceStatus.toggleMute}>{voiceStatus.muted?<MicOff size={17}/>:<Mic size={17}/>}</button><button className={voiceStatus.deafened?"off":""} aria-label={voiceStatus.deafened?"Undeafen":"Deafen"} title={voiceStatus.deafened?"Undeafen":"Deafen"} onClick={voiceStatus.toggleDeafen}>{voiceStatus.deafened?<VolumeX size={17}/>:<Headphones size={17}/>}</button><button className="disconnect" aria-label="Disconnect from voice" title="Disconnect" onClick={voiceStatus.leave}><PhoneOff size={17}/></button></span>
+        <span className="global-lobby-actions"><button className={voiceStatus.camera?"active":""} aria-label={voiceStatus.camera?"Turn camera off":"Turn camera on"} title={voiceStatus.camera?"Turn camera off":"Turn camera on"} onClick={voiceStatus.toggleCamera}>{voiceStatus.camera?<Camera size={18}/>:<CameraOff size={18}/>}</button><button className={voiceStatus.sharing?"active":""} aria-label={voiceStatus.sharing?"Stop sharing":"Share screen"} title={voiceStatus.sharing?"Stop sharing":"Share screen"} onClick={()=>{returnToVoice();requestAnimationFrame(()=>voiceStatus.toggleShare?.())}}><MonitorUp size={18}/></button><button aria-label="Invite a member to voice" title="Invite to voice" onClick={()=>{returnToVoice();requestAnimationFrame(()=>voiceStatus.invite?.())}}><UserPlus size={18}/></button><button aria-label="Open lobby" title="Open lobby" onClick={returnToVoice}><LayoutGrid size={18}/></button></span>
       </div>}
       {profileOpen&&<div ref={profileCard} className={`own-profile-card${voiceStatus?" voice-active":""}`}><button className="own-profile-close" aria-label="Close profile" onClick={()=>setProfileOpen(false)}><X size={16}/></button><div className="own-profile-banner"/><div className="own-profile-avatar"><Initial name={user.name}/><i/></div><h2>{user.name}</h2><p className="own-profile-email"><Mail size={13}/>{user.email}</p><div className="own-profile-status"><i/><span><strong>Online</strong><small>{voiceStatus?`In ${voiceStatus.serverName} / ${voiceStatus.channelName}`:"Ready to chat"}</small></span></div><div className="own-profile-actions"><button onClick={()=>{setProfileOpen(false);onSettings()}}><Pencil size={16}/><span><strong>Edit Profile</strong><small>Account, email, and password</small></span></button><button onClick={()=>void navigator.clipboard.writeText(user.id)}><Copy size={16}/><span><strong>Copy User ID</strong><small>{user.id}</small></span></button></div></div>}
     </>
