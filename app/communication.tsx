@@ -23,6 +23,7 @@ import {
   VolumeX,
   Mic,
   MicOff,
+  Headphones,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -702,7 +703,7 @@ function Inbox({
           <span className="global-voice-status-icon"><Volume2 size={18}/></span>
           <span><strong>Voice Connected</strong><small>{voiceStatus.serverName} / {voiceStatus.channelName}</small></span>
         </button>
-        <span className="global-voice-actions"><button className={voiceStatus.muted?"off":""} aria-label={voiceStatus.muted?"Unmute microphone":"Mute microphone"} onClick={voiceStatus.toggleMute}>{voiceStatus.muted?<MicOff size={17}/>:<Mic size={17}/>}</button><button className={voiceStatus.deafened?"off":""} aria-label={voiceStatus.deafened?"Undeafen":"Deafen"} onClick={voiceStatus.toggleDeafen}>{voiceStatus.deafened?<VolumeX size={17}/>:<Volume2 size={17}/>}</button></span>
+        <span className="global-voice-actions"><button className={voiceStatus.muted?"off":""} aria-label={voiceStatus.muted?"Unmute microphone":"Mute microphone"} title={voiceStatus.muted?"Unmute":"Mute"} onClick={voiceStatus.toggleMute}>{voiceStatus.muted?<MicOff size={17}/>:<Mic size={17}/>}</button><button className={voiceStatus.deafened?"off":""} aria-label={voiceStatus.deafened?"Undeafen":"Deafen"} title={voiceStatus.deafened?"Undeafen":"Deafen"} onClick={voiceStatus.toggleDeafen}>{voiceStatus.deafened?<VolumeX size={17}/>:<Headphones size={17}/>}</button></span>
       </div>}
     </>
   );
