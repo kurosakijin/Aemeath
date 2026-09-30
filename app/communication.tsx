@@ -24,6 +24,8 @@ import {
   Mic,
   MicOff,
   Headphones,
+  Copy,
+  Mail,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -109,9 +111,11 @@ function Inbox({
     [more, setMore] = useState(false),
     [olderLoading, setOlderLoading] = useState(false);
   const [navigationReady,setNavigationReady]=useState(false);
+  const [profileOpen,setProfileOpen]=useState(false);
   const [voiceStatus,setVoiceStatus]=useState<({serverId:string;serverName:string;channelId:string;channelName:string}&Partial<VoiceControls>)|null>(null);
   const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
   const bottom = useRef<HTMLDivElement>(null),
+    profileCard=useRef<HTMLDivElement>(null),
     current = useRef(""),
     conversationSeen = useRef<Map<string,number>|null>(null),
     pending = useRef<{ id: string; body: string; conversation: string } | null>(
@@ -119,6 +123,7 @@ function Inbox({
     ),
     count = useRef(0);
   const calls = useCalls();
+  useEffect(()=>{if(!profileOpen)return;const close=(event:PointerEvent)=>{if(!profileCard.current?.contains(event.target as Node)&&!(event.target as Element).closest?.(".user-profile-trigger"))setProfileOpen(false)},key=(event:KeyboardEvent)=>{if(event.key==="Escape")setProfileOpen(false)};document.addEventListener("pointerdown",close);document.addEventListener("keydown",key);return()=>{document.removeEventListener("pointerdown",close);document.removeEventListener("keydown",key)}},[profileOpen]);
   const conversation = conversations.find((c) => c.id === selected);
   useEffect(()=>{const saved=readNavigationMemory(user.id);if(saved?.view==="server"&&saved.server)setServerView(saved.server);else if(saved?.view==="direct"&&saved.conversation)setSelected(saved.conversation);setNavigationReady(true)},[user.id]);
   const refresh = useCallback(async () => {
@@ -314,6 +319,7 @@ function Inbox({
       <Aemeath
         user={user}
         onSettings={onSettings}
+        onProfile={()=>setProfileOpen(open=>!open)}
         onDirect={() => {writeNavigationMemory(user.id,{view:"direct"});setServerView(null)}}
         onVoiceStatus={setVoiceStatus}
         initialServer={serverView||""}
@@ -419,11 +425,10 @@ function Inbox({
             </div>
           </SidebarContent>
           <div className="user-bar">
-            <Initial name={user.name} />
-            <div>
+            <button className="user-profile-trigger" onClick={()=>setProfileOpen(open=>!open)} aria-label="Show my profile"><Initial name={user.name} /><span>
               <strong>{user.name}</strong>
               <small>My account</small>
-            </div>
+            </span></button>
             <button
               className="profile-button"
               onClick={onSettings}
@@ -710,6 +715,7 @@ function Inbox({
         </button>
         <span className="global-voice-actions"><button className={voiceStatus.muted?"off":""} aria-label={voiceStatus.muted?"Unmute microphone":"Mute microphone"} title={voiceStatus.muted?"Unmute":"Mute"} onClick={voiceStatus.toggleMute}>{voiceStatus.muted?<MicOff size={17}/>:<Mic size={17}/>}</button><button className={voiceStatus.deafened?"off":""} aria-label={voiceStatus.deafened?"Undeafen":"Deafen"} title={voiceStatus.deafened?"Undeafen":"Deafen"} onClick={voiceStatus.toggleDeafen}>{voiceStatus.deafened?<VolumeX size={17}/>:<Headphones size={17}/>}</button></span>
       </div>}
+      {profileOpen&&<div ref={profileCard} className={`own-profile-card${voiceStatus?" voice-active":""}`}><button className="own-profile-close" aria-label="Close profile" onClick={()=>setProfileOpen(false)}><X size={16}/></button><div className="own-profile-banner"/><div className="own-profile-avatar"><Initial name={user.name}/><i/></div><h2>{user.name}</h2><p className="own-profile-email"><Mail size={13}/>{user.email}</p><div className="own-profile-status"><i/><span><strong>Online</strong><small>{voiceStatus?`In ${voiceStatus.serverName} / ${voiceStatus.channelName}`:"Ready to chat"}</small></span></div><div className="own-profile-actions"><button onClick={()=>{setProfileOpen(false);onSettings()}}><Pencil size={16}/><span><strong>Edit Profile</strong><small>Account, email, and password</small></span></button><button onClick={()=>void navigator.clipboard.writeText(user.id)}><Copy size={16}/><span><strong>Copy User ID</strong><small>{user.id}</small></span></button></div></div>}
     </>
   );
 }

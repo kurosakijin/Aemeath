@@ -89,6 +89,7 @@ export default function Aemeath({
   user,
   onSettings,
   onDirect,
+  onProfile,
   onVoiceStatus,
   initialServer,
   startCreate = false,
@@ -96,6 +97,7 @@ export default function Aemeath({
   user: LocalUser;
   onSettings: () => void;
   onDirect: () => void;
+  onProfile:()=>void;
   onVoiceStatus:(status:({serverId:string;serverName:string;channelId:string;channelName:string}&Partial<VoiceControls>)|null)=>void;
   initialServer: string;
   startCreate?: boolean;
@@ -562,11 +564,10 @@ export default function Aemeath({
             </div>
           </SidebarContent>
           <div className="user-bar">
-            <div className="avatar">{initials(name)}</div>
-            <div>
+            <button className="user-profile-trigger" onClick={onProfile} aria-label="Show my profile"><div className="avatar">{initials(name)}</div><span>
               <strong>{name}</strong>
               <small>{user ? "Signed in" : "Sign in to connect"}</small>
-            </div>
+            </span></button>
             {user && (
               <button
                 className="profile-button"
