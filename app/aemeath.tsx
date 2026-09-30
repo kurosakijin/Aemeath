@@ -83,12 +83,14 @@ export default function Aemeath({
   user,
   onSettings,
   onDirect,
+  onVoiceStatus,
   initialServer,
   startCreate = false,
 }: {
   user: LocalUser;
   onSettings: () => void;
   onDirect: () => void;
+  onVoiceStatus:(status:{serverId:string;serverName:string;channelId:string;channelName:string}|null)=>void;
   initialServer: string;
   startCreate?: boolean;
 }) {
@@ -98,7 +100,7 @@ export default function Aemeath({
     [current, setCurrent] = useState(""),
     [members, setMembers] = useState<Member[]>([]),
     [voiceMembers,setVoiceMembers]=useState<VoiceMember[]>([]),
-    [activeVoice,setActiveVoice]=useState(""),
+    [activeVoice,setActiveVoice]=useState<{id:string;name:string;serverId:string;serverName:string}|null>(null),
     [voiceInviteChannel,setVoiceInviteChannel]=useState(""),
     [incomingVoiceInvite,setIncomingVoiceInvite]=useState<VoiceInvite|null>(null),
     [messages, setMessages] = useState<Message[]>([]);
@@ -138,7 +140,7 @@ export default function Aemeath({
   const server = servers.find((s) => s.id === selected),
     channel = channels.find((c) => c.id === current),
     isVoice = channel?.kind === "voice",
-    voiceChannel = channels.find(c=>c.id===(activeVoice||(isVoice?current:""))),
+    voiceChannel = activeVoice||((isVoice&&channel&&server)?{id:channel.id,name:channel.name,serverId:server.id,serverName:server.name}:null),
     owner = server?.owner === user?.id,
     manager = owner || server?.membership_role === "admin";
   const open = (type: string) => {
@@ -148,6 +150,7 @@ export default function Aemeath({
     setCopied(false);
     setModal(type);
   };
+  useEffect(()=>{if(initialServer)setSelected(initialServer)},[initialServer]);
   const openChannel = (item?: Channel) => {
     setFormError("");
     setEditingChannel(item?.id || "");
@@ -611,7 +614,7 @@ export default function Aemeath({
             </div>
           )}
           {incomingVoiceInvite&&<div className="voice-invite-banner"><div><strong>{incomingVoiceInvite.from_name} invited you to voice</strong><span>Join {incomingVoiceInvite.channel_name}</span></div><button className="join" onClick={()=>{const invite=incomingVoiceInvite;setIncomingVoiceInvite(null);setCurrent(invite.channel);void api("",{action:"voice-invite-response",id:invite.id})}}>Join</button><button aria-label="Dismiss voice invite" onClick={()=>{const invite=incomingVoiceInvite;setIncomingVoiceInvite(null);void api("",{action:"voice-invite-response",id:invite.id})}}><X size={16}/></button></div>}
-          {voiceChannel&&<div className={`voice-room-host${isVoice?"":" background"}`}><VoiceRoom channel={voiceChannel.id} name={voiceChannel.name} user={{id:user.id,name}} onInvite={()=>{setVoiceInviteChannel(voiceChannel.id);setFormError("");setModal("voice-invite")}} onJoinedChange={joined=>setActiveVoice(joined?voiceChannel.id:"")}/></div>}
+          {voiceChannel&&<div className={`voice-room-host${current===voiceChannel.id?"":" background"}`}><VoiceRoom channel={voiceChannel.id} name={voiceChannel.name} user={{id:user.id,name}} onInvite={()=>{setVoiceInviteChannel(voiceChannel.id);setFormError("");setModal("voice-invite")}} onJoinedChange={joined=>{const status=joined?voiceChannel:null;setActiveVoice(status);onVoiceStatus(status?{serverId:status.serverId,serverName:status.serverName,channelId:status.id,channelName:status.name}:null)}}/></div>}
           {!isVoice&&<div className="conversation">
             {!server ? (
               <>

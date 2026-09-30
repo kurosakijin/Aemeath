@@ -19,6 +19,7 @@ import {
   EyeOff,
   Pencil,
   Trash2,
+  Volume2,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -101,6 +102,7 @@ function Inbox({
     [more, setMore] = useState(false),
     [olderLoading, setOlderLoading] = useState(false);
   const [navigationReady,setNavigationReady]=useState(false);
+  const [voiceStatus,setVoiceStatus]=useState<{serverId:string;serverName:string;channelId:string;channelName:string}|null>(null);
   const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
   const bottom = useRef<HTMLDivElement>(null),
     current = useRef(""),
@@ -296,18 +298,20 @@ function Inbox({
     setDialog(true);
   };
   if(!navigationReady)return <div className="app-loading">Restoring your last channel…</div>;
-  if (serverView !== null)
-    return (
+  return (
+    <>
+      <div className={`persistent-app-view${serverView!==null?" active":" hidden"}`}>
       <Aemeath
         user={user}
         onSettings={onSettings}
         onDirect={() => {writeNavigationMemory(user.id,{view:"direct"});setServerView(null)}}
-        initialServer={serverView}
-        startCreate={!serverView}
+        onVoiceStatus={setVoiceStatus}
+        initialServer={serverView||""}
+        startCreate={serverView===""}
       />
-    );
-  return (
-    <SidebarProvider>
+      </div>
+      <div className={`persistent-app-view${serverView===null?" active":" hidden"}`}>
+      <SidebarProvider>
       <div className="aemeath-app dm-app">
         <nav className={`server-rail${mobile?" mobile-open":""}`} aria-label="Home and servers">
           <div className="brand-icon" title="Aemeath">
@@ -687,7 +691,13 @@ function Inbox({
           </p>
         </DialogContent>
       </Dialog>
-    </SidebarProvider>
+      </SidebarProvider>
+      </div>
+      {voiceStatus&&<button className="global-voice-status" onClick={()=>{writeNavigationMemory(user.id,{view:"server",server:voiceStatus.serverId,channel:voiceStatus.channelId});setServerView(voiceStatus.serverId)}} aria-label={`Return to ${voiceStatus.channelName} voice channel`}>
+        <span className="global-voice-status-icon"><Volume2 size={18}/></span>
+        <span><strong>Voice Connected</strong><small>{voiceStatus.serverName} / {voiceStatus.channelName}</small></span>
+      </button>}
+    </>
   );
 }
 function AttachmentDraft({source,name,spoiler,onSpoiler,onRemove,onReplace}:{source:string;name:string;spoiler:boolean;onSpoiler:()=>void;onRemove:()=>void;onReplace:(file:File)=>void}){return <div className="attachment-draft"><div className="attachment-tools"><button type="button" title={spoiler?"Remove spoiler":"Mark as spoiler"} onClick={onSpoiler}>{spoiler?<EyeOff size={17}/>:<Eye size={17}/>}</button><label title="Replace image"><Pencil size={16}/><input className="chat-image-input" type="file" accept="image/*" onChange={(e)=>{const file=e.target.files?.[0];e.target.value="";if(file)onReplace(file)}}/></label><button type="button" className="remove" title="Remove image" onClick={onRemove}><Trash2 size={17}/></button></div><div className={spoiler?"draft-image spoiler":"draft-image"}><img src={source} alt="Attachment preview"/></div><span>{name||"image.webp"}</span></div>}
