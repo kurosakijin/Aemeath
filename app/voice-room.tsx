@@ -105,7 +105,7 @@ async function post(channel: string, data: Record<string, unknown>) {
   return result;
 }
 
-export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChange, onVoiceControls }: { channel: string; name: string; user: Person; onInvite:()=>void; onJoinedChange:(joined:boolean)=>void; onVoiceControls:(controls:VoiceControls|null)=>void }) {
+export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChange, onVoiceControls, autoJoin=false, initialMuted=false, initialDeafened=false }: { channel: string; name: string; user: Person; onInvite:()=>void; onJoinedChange:(joined:boolean)=>void; onVoiceControls:(controls:VoiceControls|null)=>void; autoJoin?:boolean; initialMuted?:boolean; initialDeafened?:boolean }) {
   const [joined, setJoined] = useState(false), [members, setMembers] = useState<Person[]>([]),
     [remotes, setRemotes] = useState<Remote[]>([]), [muted, setMuted] = useState(false), [deafened,setDeafened]=useState(false),
     [camera, setCamera] = useState(false), [sharing, setSharing] = useState(false),
@@ -292,7 +292,7 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
       else try { local.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation, noiseSuppression, deviceId: micId === "default" ? undefined : { exact: micId } }, video: false });microphoneTrack.current=local.current.getAudioTracks()[0]||null;if(microphoneTrack.current)microphoneTrack.current.contentHint="speech";await refreshDevices(); }
       catch(e){if(mediaPermissionDenied(e)||(e instanceof DOMException&&e.name==="NotFoundError")){local.current=new MediaStream();listenOnly=true}else throw e}
       after.current = Date.now();await connectLiveKit();await voicePost({ action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true);onJoinedChange(true);joinedRef.current=true; roomTone("join");
-      mutedRef.current=listenOnly;deafenedRef.current=false;mutedBeforeDeafenRef.current=listenOnly;setMuted(listenOnly);setDeafened(false);void broadcastVoiceState(listenOnly,false);if(listenOnly)setError("Joined in listen-only mode. Use the microphone button when you are ready to allow access.");
+      const restoredMuted=listenOnly||initialMuted||initialDeafened,restoredDeafened=!listenOnly&&initialDeafened;microphoneTrack.current&&(microphoneTrack.current.enabled=!restoredMuted);mutedRef.current=restoredMuted;deafenedRef.current=restoredDeafened;mutedBeforeDeafenRef.current=initialDeafened?initialMuted:restoredMuted;setMuted(restoredMuted);setDeafened(restoredDeafened);void broadcastVoiceState(restoredMuted,restoredDeafened);if(listenOnly)setError("Joined in listen-only mode. Use the microphone button when you are ready to allow access.");
     } catch (e) { setError(e instanceof Error ? e.message : "Microphone access is required to join."); local.current?.getTracks().forEach((t) => t.stop()); local.current = null; }
     finally { setBusy(false); }
   }
@@ -354,6 +354,7 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
     } catch (e) { if ((e as DOMException).name !== "NotAllowedError") setError((e as Error).message); }
   }
   function setLocalPreview(stream:MediaStream|null=local.current){if(localVideo.current)localVideo.current.srcObject=stream}
+  const autoJoinAttempted=useRef(false);useEffect(()=>{if(autoJoin&&!joined&&!busy&&!autoJoinAttempted.current){autoJoinAttempted.current=true;void join()}},[autoJoin,joined,busy]);
   useEffect(()=>{if(joined)onVoiceControls({muted,deafened,camera,sharing,toggleMute:()=>void toggleMute(),toggleDeafen,toggleCamera:()=>void toggleCamera(),toggleShare:()=>sharing?void stopSharingRef.current?.():void shareScreen(),invite:onInvite,leave:()=>void leave()});else onVoiceControls(null)},[joined,muted,deafened,camera,sharing]);
   const visibleMembers=members.filter(member=>!member.reconnecting),participantCount=Math.min(30,Math.max(1,visibleMembers.length)),columns=participantCount<=9?3:participantCount<=16?4:participantCount<=25?5:6,rows=participantCount<=9?3:participantCount<=16?4:5,hasStreams=sharing||camera||remoteSharing.size>0,remoteStreamIds=remotes.filter(remote=>remoteSharing.has(remote.id)).flatMap(remote=>remote.stream.getVideoTracks().map(track=>`${remote.id}-${track.id}`)),streamIds=[...(sharing?[`${user.id}-screen`]:[]),...(camera?[`${user.id}-camera`]:[]),...remoteStreamIds],activeStream=streamIds.includes(focusedStream)?focusedStream:streamIds[0]||"",callTileCount=Math.min(31,streamIds.length+visibleMembers.length+1),callColumns=callTileCount===1?1:callTileCount<=4?2:callTileCount<=9?3:4,callRows=Math.ceil(callTileCount/callColumns);
   useEffect(()=>{if(!hasStreams){setStreamLayout("tiles");setFocusedStream("")}},[hasStreams]);

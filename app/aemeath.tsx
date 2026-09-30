@@ -108,7 +108,7 @@ export default function Aemeath({
     [current, setCurrent] = useState(""),
     [members, setMembers] = useState<Member[]>([]),
     [voiceMembers,setVoiceMembers]=useState<VoiceMember[]>([]),
-    [activeVoice,setActiveVoice]=useState<{id:string;name:string;serverId:string;serverName:string}|null>(null),
+    [activeVoice,setActiveVoice]=useState<{id:string;name:string;serverId:string;serverName:string;restore?:boolean;muted?:boolean;deafened?:boolean}|null>(null),
     [voiceInviteChannel,setVoiceInviteChannel]=useState(""),
     [incomingVoiceInvite,setIncomingVoiceInvite]=useState<VoiceInvite|null>(null),
     [messages, setMessages] = useState<Message[]>([]);
@@ -161,6 +161,7 @@ export default function Aemeath({
     setModal(type);
   };
   useEffect(()=>{if(initialServer)setSelected(initialServer)},[initialServer]);
+  useEffect(()=>{try{const saved=sessionStorage.getItem(`aemeath-voice-session-${user.id}`);if(!saved)return;const value=JSON.parse(saved) as {id?:string;name?:string;serverId?:string;serverName?:string;muted?:boolean;deafened?:boolean};if(value.id&&value.name&&value.serverId&&value.serverName)setActiveVoice({...value,id:value.id,name:value.name,serverId:value.serverId,serverName:value.serverName,restore:true})}catch{}},[user.id]);
   const openChannel = (item?: Channel) => {
     setFormError("");
     setEditingChannel(item?.id || "");
@@ -625,7 +626,7 @@ export default function Aemeath({
             </div>
           )}
           {incomingVoiceInvite&&<div className="voice-invite-banner"><div><strong>{incomingVoiceInvite.from_name} invited you to voice</strong><span>Join {incomingVoiceInvite.channel_name}</span></div><button className="join" onClick={()=>{const invite=incomingVoiceInvite;setIncomingVoiceInvite(null);setCurrent(invite.channel);void api("",{action:"voice-invite-response",id:invite.id})}}>Join</button><button aria-label="Dismiss voice invite" onClick={()=>{const invite=incomingVoiceInvite;setIncomingVoiceInvite(null);void api("",{action:"voice-invite-response",id:invite.id})}}><X size={16}/></button></div>}
-          {voiceChannel&&<div className={`voice-room-host${current===voiceChannel.id?"":" background"}`}><VoiceRoom channel={voiceChannel.id} name={voiceChannel.name} user={{id:user.id,name}} onInvite={()=>{setVoiceInviteChannel(voiceChannel.id);setFormError("");setModal("voice-invite")}} onJoinedChange={joined=>{const status=joined?voiceChannel:null;setActiveVoice(status);onVoiceStatus(status?{serverId:status.serverId,serverName:status.serverName,channelId:status.id,channelName:status.name}:null)}} onVoiceControls={controls=>{if(controls)onVoiceStatus({serverId:voiceChannel.serverId,serverName:voiceChannel.serverName,channelId:voiceChannel.id,channelName:voiceChannel.name,...controls})}}/></div>}
+          {voiceChannel&&<div className={`voice-room-host${current===voiceChannel.id?"":" background"}`}><VoiceRoom channel={voiceChannel.id} name={voiceChannel.name} user={{id:user.id,name}} autoJoin={!!voiceChannel.restore} initialMuted={!!voiceChannel.muted} initialDeafened={!!voiceChannel.deafened} onInvite={()=>{setVoiceInviteChannel(voiceChannel.id);setFormError("");setModal("voice-invite")}} onJoinedChange={joined=>{const status=joined?{...voiceChannel,restore:false}:null;setActiveVoice(status);try{if(status)sessionStorage.setItem(`aemeath-voice-session-${user.id}`,JSON.stringify(status));else sessionStorage.removeItem(`aemeath-voice-session-${user.id}`)}catch{}onVoiceStatus(status?{serverId:status.serverId,serverName:status.serverName,channelId:status.id,channelName:status.name}:null)}} onVoiceControls={controls=>{if(controls){const status={...voiceChannel,restore:false,muted:controls.muted,deafened:controls.deafened};setActiveVoice(status);try{sessionStorage.setItem(`aemeath-voice-session-${user.id}`,JSON.stringify(status))}catch{}onVoiceStatus({serverId:voiceChannel.serverId,serverName:voiceChannel.serverName,channelId:voiceChannel.id,channelName:voiceChannel.name,...controls})}}}/></div>}
           {!isVoice&&<div className="conversation">
             {!server ? (
               <>
