@@ -7,10 +7,10 @@ const bad = (message: string, status = 400) => json({ error: message }, status);
 async function membership(server: string, user: string) {
   return database()
     .prepare(
-      "SELECT s.* FROM servers s JOIN members m ON m.server=s.id WHERE s.id=? AND m.user=?",
+      "SELECT s.*,CASE WHEN s.owner=m.user THEN 'owner' ELSE COALESCE(m.role,'member') END AS membership_role FROM servers s JOIN members m ON m.server=s.id WHERE s.id=? AND m.user=?",
     )
     .bind(server, user)
-    .first<{ id: string; name: string; owner: string }>();
+    .first<{ id: string; name: string; owner: string; membership_role:string; access:string }>();
 }
 export async function GET(request: Request) {
   try {
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
           .all(),
         db
           .prepare(
-            "SELECT m.user as id,p.name,m.joined FROM members m LEFT JOIN profiles p ON p.id=m.user WHERE m.server=? ORDER BY m.joined",
+            "SELECT m.user as id,p.name,m.joined,CASE WHEN s.owner=m.user THEN 'owner' ELSE COALESCE(m.role,'member') END AS role FROM members m JOIN servers s ON s.id=m.server LEFT JOIN profiles p ON p.id=m.user WHERE m.server=? ORDER BY CASE WHEN s.owner=m.user THEN 0 WHEN m.role='admin' THEN 1 ELSE 2 END,m.joined",
           )
           .bind(server)
           .all(),
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
     }
     const list = await db
       .prepare(
-        "SELECT s.* FROM servers s JOIN members m ON m.server=s.id WHERE m.user=? ORDER BY s.created",
+        "SELECT s.*,CASE WHEN s.owner=m.user THEN 'owner' ELSE COALESCE(m.role,'member') END AS membership_role FROM servers s JOIN members m ON m.server=s.id WHERE m.user=? ORDER BY s.created",
       )
       .bind(user.userId)
       .all();
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
           )
           .bind(id, name, uid, now),
         db
-          .prepare("INSERT INTO members (server,user,joined) VALUES (?,?,?)")
+          .prepare("INSERT INTO members (server,user,joined,role) VALUES (?,?,?,'owner')")
           .bind(id, uid, now),
         db
           .prepare(
@@ -145,14 +145,15 @@ export async function POST(request: Request) {
       if (!/^[a-f0-9]{12,32}$/.test(code))
         return bad("Enter a valid invitation code.");
       const invite = await db
-        .prepare("SELECT server FROM invites WHERE code=? AND expires>?")
+        .prepare("SELECT i.server,s.access FROM invites i JOIN servers s ON s.id=i.server WHERE i.code=? AND i.expires>?")
         .bind(code, now)
-        .first<{ server: string }>();
+        .first<{ server: string; access:string }>();
       if (!invite)
         return bad("This invite has expired or is no longer available.");
+      if(invite.access==='closed')return bad("This server is not accepting new members.",403);
       await db
         .prepare(
-          "INSERT INTO members (server,user,joined) VALUES (?,?,?) ON CONFLICT(server,user) DO NOTHING",
+          "INSERT INTO members (server,user,joined,role) VALUES (?,?,?,'member') ON CONFLICT(server,user) DO NOTHING",
         )
         .bind(invite.server, uid, now)
         .run();
@@ -189,15 +190,17 @@ export async function POST(request: Request) {
       const found=await db.prepare("SELECT m.user,c.server FROM messages m JOIN channels c ON c.id=m.channel WHERE m.id=?").bind(id).first<{user:string;server:string}>();
       if(!found)return bad("Message not found.",404);
       const target=await membership(found.server,uid);
-      if(!target||(found.user!==uid&&target.owner!==uid))return bad("You cannot delete this message.",403);
+      if(!target||(found.user!==uid&&target.owner!==uid&&target.membership_role!=="admin"))return bad("You cannot delete this message.",403);
       await db.prepare("DELETE FROM messages WHERE id=?").bind(id).run();
       return json({ok:true});
     }
     if (typeof data.server !== "string") return bad("Choose a server.");
     const server = await membership(data.server, uid);
     if (!server) return bad("You do not have access to this server.", 403);
-    if (action !== "invite" && server.owner !== uid)
-      return bad("Only the server owner can do that.", 403);
+    const role=server.owner===uid?'owner':server.membership_role;
+    const manager=role==='owner'||role==='admin';
+    if (action !== "invite" && !manager)
+      return bad("You need an admin role to do that.", 403);
     if (action === "edit-server") {
       const name = typeof data.name === "string" ? data.name.trim() : "";
       const icon = typeof data.icon === "string" ? data.icon : "";
@@ -208,6 +211,30 @@ export async function POST(request: Request) {
       if (!/^#[0-9a-f]{6}$/i.test(banner)) return bad("Choose a valid banner color.");
       await db.prepare("UPDATE servers SET name=?,icon=?,banner=?,traits=? WHERE id=?").bind(name,icon,banner,traits,server.id).run();
       return json({ok:true});
+    }
+    if(action==="set-member-role"){
+      if(role!=="owner")return bad("Only the server owner can assign administrators.",403);
+      const target=typeof data.user==="string"?data.user:"",nextRole=data.role==="admin"?"admin":"member";
+      if(target===server.owner)return bad("The server owner role cannot be changed.");
+      const found=await db.prepare("SELECT user FROM members WHERE server=? AND user=?").bind(server.id,target).first();
+      if(!found)return bad("Member not found.",404);
+      await db.prepare("UPDATE members SET role=? WHERE server=? AND user=?").bind(nextRole,server.id,target).run();
+      return json({ok:true});
+    }
+    if(action==="remove-member"){
+      const target=typeof data.user==="string"?data.user:"";
+      if(target===server.owner)return bad("The server owner cannot be removed.");
+      const found=await db.prepare("SELECT role FROM members WHERE server=? AND user=?").bind(server.id,target).first<{role:string}>();
+      if(!found)return bad("Member not found.",404);
+      if(role!=="owner"&&found.role==='admin')return bad("Only the owner can remove an administrator.",403);
+      await db.prepare("DELETE FROM members WHERE server=? AND user=?").bind(server.id,target).run();
+      return json({ok:true});
+    }
+    if(action==="edit-access"){
+      const access=data.access==='closed'?'closed':'invite';
+      await db.prepare("UPDATE servers SET access=? WHERE id=?").bind(access,server.id).run();
+      if(access==='closed')await db.prepare("DELETE FROM invites WHERE server=?").bind(server.id).run();
+      return json({ok:true,access});
     }
     if (action === "channel") {
       const name =
@@ -278,6 +305,7 @@ export async function POST(request: Request) {
       return json({ ok: true });
     }
     if (action === "invite") {
+      if(server.access==='closed')return bad("Open server access before creating an invite.",403);
       const code = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
       await db
         .prepare("INSERT INTO invites (code,server,expires) VALUES (?,?,?)")

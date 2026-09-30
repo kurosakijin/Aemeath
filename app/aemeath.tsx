@@ -51,14 +51,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-type Server = { id: string; name: string; owner: string; icon?:string; banner?:string; traits?:string };
+type Server = { id: string; name: string; owner: string; membership_role?:"owner"|"admin"|"member"; access?:"invite"|"closed"; icon?:string; banner?:string; traits?:string };
 type Channel = {
   id: string;
   name: string;
   kind?: "text" | "voice" | "forum";
   topic?: string;
 };
-type Member = { id: string; name: string };
+type Member = { id: string; name: string; joined?:number; role?:"owner"|"admin"|"member" };
 type VoiceMember = Member & { channel:string; left_at?:number|string };
 type InvitePreview = { code:string; expires:number; id:string; name:string; icon?:string; banner?:string; inviter:string; members:number };
 type Message = {
@@ -134,7 +134,8 @@ export default function Aemeath({
   const server = servers.find((s) => s.id === selected),
     channel = channels.find((c) => c.id === current),
     isVoice = channel?.kind === "voice",
-    owner = server?.owner === user?.id;
+    owner = server?.owner === user?.id,
+    manager = owner || server?.membership_role === "admin";
   const open = (type: string) => {
     setFormError("");
     setField(type === "profile" ? name : "");
@@ -378,7 +379,7 @@ export default function Aemeath({
         ? "/"
         : window.location.pathname + window.location.search,
     );
-  if (modal === "server-settings" && server) return <ServerSettings server={server} members={members} onClose={()=>setModal("")} onInvite={()=>{setModal("");void invite()}} onSave={async(value)=>{await api("",{action:"edit-server",server:server.id,...value});await refreshServers(server.id)}}/>;
+  if (modal === "server-settings" && server) return <ServerSettings server={server} members={members} onClose={()=>setModal("")} onInvite={()=>{setModal("");void invite()}} onSave={async(value)=>{await api("",{action:"edit-server",server:server.id,...value});await refreshServers(server.id)}} onManage={async(value)=>{await api("",{...value,server:server.id});const updated=await api("?server="+encodeURIComponent(server.id));setMembers(updated.members);await refreshServers(server.id)}}/>;
   return (
     <SidebarProvider>
       <div className="aemeath-app">
@@ -443,7 +444,7 @@ export default function Aemeath({
             </header>
             {serverMenu&&server&&<div className="server-menu">
               <button onClick={()=>{setServerMenu(false);void invite()}}><UserPlus size={17}/> Invite to server</button>
-              {owner&&<><button onClick={()=>{setServerMenu(false);setModal("server-settings")}}><Settings size={17}/> Server settings</button><button onClick={()=>{setServerMenu(false);openChannel()}}><Plus size={17}/> Create channel</button></>}
+              {manager&&<><button onClick={()=>{setServerMenu(false);setModal("server-settings")}}><Settings size={17}/> Server settings</button><button onClick={()=>{setServerMenu(false);openChannel()}}><Plus size={17}/> Create channel</button></>}
               <div/>
               <button><Bell size={17}/> Notification settings</button>
               <button><Shield size={17}/> Privacy settings</button>
@@ -452,7 +453,7 @@ export default function Aemeath({
             </div>}
             <div className="channel-group">
               <span>TEXT CHANNELS</span>
-              {owner && (
+              {manager && (
                 <button
                   title="Create channel"
                   aria-label="Create channel"
@@ -481,7 +482,7 @@ export default function Aemeath({
                       <Hash size={19} />
                     )}
                     {c.name}
-                    {owner && (
+                    {manager && (
                       <Pencil
                         className="channel-edit"
                         size={14}
@@ -500,7 +501,7 @@ export default function Aemeath({
             )}
             <div className="channel-group">
               <span>VOICE CHANNELS</span>
-              {owner && (
+              {manager && (
                 <button
                   title="Create voice channel"
                   onClick={() => {
@@ -524,7 +525,7 @@ export default function Aemeath({
                 >
                   <Volume2 size={19} />
                   {c.name}
-                  {owner && (
+                  {manager && (
                     <Pencil
                       className="channel-edit"
                       size={14}
@@ -537,7 +538,7 @@ export default function Aemeath({
                 </button>{voiceMembers.filter(person=>person.channel===c.id).map(person=><div className="voice-channel-member" key={person.id}><span>{initials(person.name||"Member")}</span><strong>{person.name||"Member"}</strong>{Number(person.left_at)>0&&<small>Reconnecting</small>}</div>)}</div>
               ))}
             <div className="sidebar-bottom">
-              <Lock size={14} /> Private by invitation
+              <Lock size={14} /> {server?.access==="closed"?"Membership closed":"Private by invitation"}
             </div>
           </SidebarContent>
           <div className="user-bar">
@@ -672,7 +673,7 @@ export default function Aemeath({
                     This is the beginning of your conversation. Make it a good
                     one.
                   </p>
-                  {owner && members.length === 1 && (
+                  {manager && members.length === 1 && (
                     <button className="primary" onClick={invite}>
                       <UserPlus size={16} /> Invite your people
                     </button>
@@ -718,7 +719,7 @@ export default function Aemeath({
                         </time>
                         {isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}
                       </div>
-                      <MessageMenu id={m.id} body={m.body} own={m.user===user.id||owner} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/>
+                      <MessageMenu id={m.id} body={m.body} own={m.user===user.id||manager} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/>
                     </article>
                   </div>
                 ))}
@@ -740,7 +741,7 @@ export default function Aemeath({
           {(!isVoice || voiceChat) && <div className={isVoice ? "composer-wrap voice-chat-drawer" : "composer-wrap"}>
             {isVoice && <div className="voice-chat-list">
               <div className="voice-chat-title"><MessageCircle size={17}/><strong>Channel chat</strong></div>
-              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{messageDate(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}</div><MessageMenu id={m.id} body={m.body} own={m.user===user.id||owner} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
+              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{messageDate(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}</div><MessageMenu id={m.id} body={m.body} own={m.user===user.id||manager} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
             </div>}
             {attachment&&<AttachmentDraft source={imageSource(attachment)} name={attachmentName} spoiler={attachmentSpoiler} onSpoiler={()=>setAttachmentSpoiler(!attachmentSpoiler)} onRemove={()=>{setAttachment("");setAttachmentName("");setAttachmentSpoiler(false)}} onReplace={async(file)=>{setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name)}catch(error){setError((error as Error).message)}finally{setSending(false)}}}/>}<form
               className={"composer " + (!current ? "disabled" : "")}
@@ -805,7 +806,7 @@ export default function Aemeath({
                 <div className="member-name">
                   {m.name || "Member"}
                   <small>
-                    {m.id === server?.owner ? "Server owner" : "Member"}
+                    {m.role==="owner"?"Server owner":m.role==="admin"?"Administrator":"Member"}
                     {m.id === user?.id ? " · You" : ""}
                   </small>
                 </div>
