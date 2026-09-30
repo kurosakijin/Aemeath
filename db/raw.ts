@@ -43,6 +43,8 @@ async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_voice_invites_to ON voice_invites("to",expires);
     DROP TABLE IF EXISTS voice_history;
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,channel TEXT NOT NULL,"user" TEXT NOT NULL,body TEXT NOT NULL,created BIGINT NOT NULL);
+    CREATE TABLE IF NOT EXISTS message_reactions(message TEXT NOT NULL,"user" TEXT NOT NULL,emoji TEXT NOT NULL,created BIGINT NOT NULL,PRIMARY KEY(message,"user",emoji));
+    CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message);
     CREATE TABLE IF NOT EXISTS invites(code TEXT PRIMARY KEY,server TEXT NOT NULL,expires BIGINT NOT NULL);
     DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='members' AND column_name='user_id') THEN ALTER TABLE members RENAME COLUMN user_id TO "user"; END IF;

@@ -41,7 +41,7 @@ import Aemeath from "./aemeath";
 import type {VoiceControls} from "./voice-room";
 import {compressChatImage,imageFromClipboard,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import { CallProvider, useCalls } from "./call-provider";
-import MessageMenu from "./message-menu";
+import MessageMenu, {type MessageReaction} from "./message-menu";
 import ImagePreview from "./image-preview";
 import {armNotifications,notifyAemeath} from "@/lib/notifications";
 import {readNavigationMemory,writeNavigationMemory} from "@/lib/navigation-memory";
@@ -64,7 +64,9 @@ type Message = {
   name: string;
   body: string;
   created: number | string;
+  reactions?:MessageReaction[];
 };
+type ReactionRow=MessageReaction&{message:string};
 const timestamp = (value: number | string) =>
   typeof value === "number" ? value : Number(value);
 const messageDate = (value: number | string) => new Date(timestamp(value));
@@ -161,14 +163,15 @@ function Inbox({
     let alive = true;
     const poll = async () => {
       try {
-        const d = await request<{ messages: Message[]; hasMore: boolean }>(
+        const d = await request<{ messages: Message[]; hasMore: boolean; reactions:ReactionRow[] }>(
           "/api/direct?conversation=" + encodeURIComponent(selected),
         );
         if (alive) {
+          const reactionMap=new Map<string,MessageReaction[]>();(d.reactions||[]).forEach(({message,...reaction})=>reactionMap.set(message,[...(reactionMap.get(message)||[]),reaction]));
           setMessages((old) =>
             Array.from(
               new Map([...old, ...d.messages].map((m) => [m.id, m])).values(),
-            ).sort((a, b) => timestamp(a.created) - timestamp(b.created)),
+            ).sort((a, b) => timestamp(a.created) - timestamp(b.created)).map(message=>({...message,reactions:reactionMap.get(message.id)||[]})),
           );
           setMore((old) => old || d.hasMore);
           setError("");
@@ -190,6 +193,7 @@ function Inbox({
       bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     count.current = messages.length;
   }, [messages, olderLoading]);
+  async function reactMessage(id:string,emoji:string){await request("/api/direct",{action:"react-message",id,emoji});setMessages(old=>old.map(message=>{if(message.id!==id)return message;const reactions=[...(message.reactions||[])],index=reactions.findIndex(reaction=>reaction.emoji===emoji),selected=index>=0&&reactions[index].reacted;for(let i=reactions.length-1;i>=0;i--){if(reactions[i].reacted&&reactions[i].emoji!==emoji){reactions[i]={...reactions[i],count:reactions[i].count-1,reacted:false};if(reactions[i].count<=0)reactions.splice(i,1)}}if(index>=0){const current=reactions.find(reaction=>reaction.emoji===emoji);if(current){current.count+=selected?-1:1;current.reacted=!selected;if(current.count<=0)reactions.splice(reactions.indexOf(current),1)}}else reactions.push({emoji,count:1,reacted:true});return{...message,reactions}}))}
   useEffect(() => {
     if (!dialog) return;
     setPeople([]);
@@ -278,16 +282,17 @@ function Inbox({
     if (!messages.length || olderLoading) return;
     setOlderLoading(true);
     try {
-      const d = await request<{ messages: Message[]; hasMore: boolean }>(
+      const d = await request<{ messages: Message[]; hasMore: boolean; reactions:ReactionRow[] }>(
         "/api/direct?conversation=" +
           selected +
           "&before=" +
           timestamp(messages[0].created),
       );
+      const reactionMap=new Map<string,MessageReaction[]>();(d.reactions||[]).forEach(({message,...reaction})=>reactionMap.set(message,[...(reactionMap.get(message)||[]),reaction]));
       setMessages((old) =>
         Array.from(
           new Map([...d.messages, ...old].map((m) => [m.id, m])).values(),
-        ).sort((a, b) => timestamp(a.created) - timestamp(b.created)),
+        ).sort((a, b) => timestamp(a.created) - timestamp(b.created)).map(message=>({...message,reactions:reactionMap.get(message.id)||message.reactions||[]})),
       );
       setMore(d.hasMore);
     } catch (e) {
@@ -549,7 +554,7 @@ function Inbox({
                         </time>
                         {isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}
                       </div>
-                      <MessageMenu id={m.id} body={m.body} own={m.sender===user.id} onReply={()=>setDraft(`@${m.name} `)} onDelete={async()=>{try{await request("/api/direct",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id));await refresh()}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/>
+                      <MessageMenu id={m.id} body={m.body} own={m.sender===user.id} reactions={m.reactions} onReact={emoji=>reactMessage(m.id,emoji)} onReply={()=>setDraft(`@${m.name} `)} onDelete={async()=>{try{await request("/api/direct",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id));await refresh()}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/>
                     </article>
                   </div>
                 ))}

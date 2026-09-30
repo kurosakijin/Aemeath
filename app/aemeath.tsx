@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import VoiceRoom, {type VoiceControls} from "./voice-room";
 import ServerSettings from "./server-settings";
-import MessageMenu from "./message-menu";
+import MessageMenu, {type MessageReaction} from "./message-menu";
 import ImagePreview from "./image-preview";
 import {compressChatImage,imageFromClipboard,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import {notifyAemeath} from "@/lib/notifications";
@@ -72,7 +72,9 @@ type Message = {
   name: string;
   body: string;
   created: number;
+  reactions?:MessageReaction[];
 };
+type ReactionRow=MessageReaction&{message:string};
 function initials(name: string) {
   return name
     .split(/\s+/)
@@ -237,10 +239,11 @@ export default function Aemeath({
         const after=messageAfter.current;
         const d = await api("?channel=" + encodeURIComponent(current)+(after?"&after="+Math.max(0,after-1):""));
         if (alive) {
-          const incoming=(d.messages||[]) as Message[];
+          const incoming=(d.messages||[]) as Message[],reactionRows=(d.reactions||[]) as ReactionRow[],reactionMap=new Map<string,MessageReaction[]>();
+          reactionRows.forEach(({message,...reaction})=>reactionMap.set(message,[...(reactionMap.get(message)||[]),reaction]));
           if(after)incoming.filter(item=>item.user!==user?.id&&Number(item.created)>after).forEach(item=>void notifyAemeath({key:`server-${item.id}`,title:`#${channel?.name||"lobby"} · ${server?.name||"Aemeath"}`,body:isImageMessage(item.body)?`${item.name||"Member"} sent an image`:`${item.name||"Member"}: ${item.body.slice(0,120)}`}));
-          if(after)setMessages(old=>{const merged=new Map(old.map(item=>[item.id,item]));incoming.forEach(item=>merged.set(item.id,item));return [...merged.values()].sort((a,b)=>Number(a.created)-Number(b.created))});
-          else setMessages(incoming);
+          if(after)setMessages(old=>{const merged=new Map(old.map(item=>[item.id,item]));incoming.forEach(item=>merged.set(item.id,item));return [...merged.values()].sort((a,b)=>Number(a.created)-Number(b.created)).map(item=>({...item,reactions:reactionMap.get(item.id)||[]}))});
+          else setMessages(incoming.map(item=>({...item,reactions:reactionMap.get(item.id)||[]})));
           if(incoming.length)messageAfter.current=Math.max(messageAfter.current,...incoming.map(item=>Number(item.created)||0));
           setError("");
         }
@@ -261,6 +264,7 @@ export default function Aemeath({
       messageCount.current = messages.length;
     }
   }, [messages]);
+  async function reactMessage(id:string,emoji:string){await api("",{action:"react-message",id,emoji});setMessages(old=>old.map(message=>{if(message.id!==id)return message;const reactions=[...(message.reactions||[])],index=reactions.findIndex(reaction=>reaction.emoji===emoji),selected=index>=0&&reactions[index].reacted;for(let i=reactions.length-1;i>=0;i--){if(reactions[i].reacted&&reactions[i].emoji!==emoji){reactions[i]={...reactions[i],count:reactions[i].count-1,reacted:false};if(reactions[i].count<=0)reactions.splice(i,1)}}if(index>=0){const current=reactions.find(reaction=>reaction.emoji===emoji);if(current){current.count+=selected?-1:1;current.reacted=!selected;if(current.count<=0)reactions.splice(reactions.indexOf(current),1)}}else reactions.push({emoji,count:1,reacted:true});return{...message,reactions}}))}
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
@@ -737,7 +741,7 @@ export default function Aemeath({
                         </time>
                         {isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}
                       </div>
-                      <MessageMenu id={m.id} body={m.body} own={m.user===user.id||manager} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/>
+                      <MessageMenu id={m.id} body={m.body} own={m.user===user.id||manager} reactions={m.reactions} onReact={emoji=>reactMessage(m.id,emoji)} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/>
                     </article>
                   </div>
                 ))}
@@ -759,7 +763,7 @@ export default function Aemeath({
           {(!isVoice || voiceChat) && <div className={isVoice ? "composer-wrap voice-chat-drawer" : "composer-wrap"}>
             {isVoice && <div className="voice-chat-list">
               <div className="voice-chat-title"><MessageCircle size={17}/><strong>Channel chat</strong></div>
-              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{messageDate(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}</div><MessageMenu id={m.id} body={m.body} own={m.user===user.id||manager} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
+              {messages.length ? messages.map((m)=><article className="voice-chat-message" key={m.id}><div className="avatar">{initials(m.name||"Member")}</div><div><strong>{m.name||"Member"}</strong><time>{messageDate(m.created).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})}</time>{isImageMessage(m.body)?<ImagePreview src={imageSource(m.body)} spoiler={isSpoilerImage(m.body)}/>:<p>{m.body}</p>}</div><MessageMenu id={m.id} body={m.body} own={m.user===user.id||manager} reactions={m.reactions} onReact={emoji=>reactMessage(m.id,emoji)} onReply={()=>setDraft(`@${m.name||"Member"} `)} onDelete={async()=>{try{await api("",{action:"delete-message",id:m.id});setMessages(old=>old.filter(item=>item.id!==m.id))}catch(e){setError((e as Error).message)}}} onReport={()=>setError("Message reported for review.")}/></article>) : <div className="voice-chat-empty">Chat while you hang out in voice.</div>}
             </div>}
             {attachment&&<AttachmentDraft source={imageSource(attachment)} name={attachmentName} spoiler={attachmentSpoiler} onSpoiler={()=>setAttachmentSpoiler(!attachmentSpoiler)} onRemove={()=>{setAttachment("");setAttachmentName("");setAttachmentSpoiler(false)}} onReplace={async(file)=>{setSending(true);try{setAttachment(await compressChatImage(file));setAttachmentName(file.name)}catch(error){setError((error as Error).message)}finally{setSending(false)}}}/>}<form
               className={"composer " + (!current ? "disabled" : "")}

@@ -40,7 +40,8 @@ export async function GET(request: Request) {
       const rows = incremental
         ? await db.prepare("SELECT m.*,p.name FROM messages m LEFT JOIN profiles p ON p.id=m.user WHERE m.channel=? AND m.created>? ORDER BY m.created,m.id LIMIT 50").bind(channel,after).all()
         : await db.prepare("SELECT m.*,p.name FROM messages m LEFT JOIN profiles p ON p.id=m.user WHERE m.channel=? ORDER BY m.created DESC,m.id DESC LIMIT 50").bind(channel).all();
-      return json({ messages: incremental ? rows.results : rows.results.reverse() });
+      const reactions=await db.prepare('SELECT r.message,r.emoji,COUNT(*)::int AS count,BOOL_OR(r."user"=?) AS reacted FROM message_reactions r JOIN messages m ON m.id=r.message WHERE m.channel=? GROUP BY r.message,r.emoji ORDER BY MIN(r.created)').bind(user.userId,channel).all();
+      return json({ messages: incremental ? rows.results : rows.results.reverse(),reactions:reactions.results });
     }
     if (server) {
       const allowed = await membership(server, user.userId);
@@ -198,8 +199,18 @@ export async function POST(request: Request) {
       if(!found)return bad("Message not found.",404);
       const target=await membership(found.server,uid);
       if(!target||(found.user!==uid&&target.owner!==uid&&target.membership_role!=="admin"))return bad("You cannot delete this message.",403);
-      await db.prepare("DELETE FROM messages WHERE id=?").bind(id).run();
+      await db.batch([db.prepare("DELETE FROM message_reactions WHERE message=?").bind(id),db.prepare("DELETE FROM messages WHERE id=?").bind(id)]);
       return json({ok:true});
+    }
+    if(action==="react-message"){
+      const id=typeof data.id==="string"?data.id:"",emoji=typeof data.emoji==="string"?data.emoji:"";
+      if(!["✅","😆","💯","❤️"].includes(emoji))return bad("Choose a supported reaction.");
+      const allowed=await db.prepare("SELECT m.id FROM messages m JOIN channels c ON c.id=m.channel JOIN members x ON x.server=c.server WHERE m.id=? AND x.user=?").bind(id,uid).first();
+      if(!allowed)return bad("Message not found.",404);
+      const existing=await db.prepare('SELECT 1 FROM message_reactions WHERE message=? AND "user"=? AND emoji=?').bind(id,uid,emoji).first();
+      await db.prepare('DELETE FROM message_reactions WHERE message=? AND "user"=?').bind(id,uid).run();
+      if(!existing)await db.prepare('INSERT INTO message_reactions(message,"user",emoji,created) VALUES (?,?,?,?)').bind(id,uid,emoji,now).run();
+      return json({ok:true,reacted:!existing});
     }
     if (typeof data.server !== "string") return bad("Choose a server.");
     const server = await membership(data.server, uid);

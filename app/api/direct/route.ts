@@ -45,9 +45,11 @@ export async function GET(r: Request) {
         )
         .bind(id, before)
         .all();
+      const reactions=await db.prepare('SELECT r.message,r.emoji,COUNT(*)::int AS count,BOOL_OR(r."user"=?) AS reacted FROM message_reactions r JOIN direct_messages m ON m.id=r.message WHERE m.conversation=? GROUP BY r.message,r.emoji ORDER BY MIN(r.created)').bind(u.id,id).all();
       return json({
         messages: rows.results.reverse(),
         hasMore: rows.results.length === 100,
+        reactions:reactions.results,
       });
     }
     const list = await db
@@ -116,8 +118,18 @@ export async function POST(r: Request) {
       const messageId=str(d.id);
       const found=await db.prepare("SELECT conversation FROM direct_messages WHERE id=? AND sender=?").bind(messageId,u.id).first<{conversation:string}>();
       if(!found)throw new AppError("You can only delete your own messages.",403);
-      await db.prepare("DELETE FROM direct_messages WHERE id=? AND sender=?").bind(messageId,u.id).run();
+      await db.batch([db.prepare("DELETE FROM message_reactions WHERE message=?").bind(messageId),db.prepare("DELETE FROM direct_messages WHERE id=? AND sender=?").bind(messageId,u.id)]);
       return json({ok:true});
+    }
+    if(d.action==="react-message"){
+      const messageId=str(d.id),emoji=str(d.emoji);
+      if(!["✅","😆","💯","❤️"].includes(emoji))throw new AppError("Choose a supported reaction.");
+      const found=await db.prepare("SELECT m.id FROM direct_messages m JOIN conversations c ON c.id=m.conversation WHERE m.id=? AND (c.first=? OR c.second=?)").bind(messageId,u.id,u.id).first();
+      if(!found)throw new AppError("Message not found.",404);
+      const existing=await db.prepare('SELECT 1 FROM message_reactions WHERE message=? AND "user"=? AND emoji=?').bind(messageId,u.id,emoji).first();
+      await db.prepare('DELETE FROM message_reactions WHERE message=? AND "user"=?').bind(messageId,u.id).run();
+      if(!existing)await db.prepare('INSERT INTO message_reactions(message,"user",emoji,created) VALUES (?,?,?,?)').bind(messageId,u.id,emoji,Date.now()).run();
+      return json({ok:true,reacted:!existing});
     }
     throw new AppError("Unknown action.");
   } catch (e) {
