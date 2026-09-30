@@ -20,6 +20,9 @@ import {
   Pencil,
   Trash2,
   Volume2,
+  VolumeX,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -34,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { request, onlineChat, type LocalUser } from "@/lib/online";
 import Aemeath from "./aemeath";
+import type {VoiceControls} from "./voice-room";
 import {compressChatImage,imageFromClipboard,imageSource,isImageMessage,isSpoilerImage,setImageSpoiler} from "@/lib/image-message";
 import { CallProvider, useCalls } from "./call-provider";
 import MessageMenu from "./message-menu";
@@ -102,7 +106,7 @@ function Inbox({
     [more, setMore] = useState(false),
     [olderLoading, setOlderLoading] = useState(false);
   const [navigationReady,setNavigationReady]=useState(false);
-  const [voiceStatus,setVoiceStatus]=useState<{serverId:string;serverName:string;channelId:string;channelName:string}|null>(null);
+  const [voiceStatus,setVoiceStatus]=useState<({serverId:string;serverName:string;channelId:string;channelName:string}&Partial<VoiceControls>)|null>(null);
   const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
   const bottom = useRef<HTMLDivElement>(null),
     current = useRef(""),
@@ -693,10 +697,13 @@ function Inbox({
       </Dialog>
       </SidebarProvider>
       </div>
-      {voiceStatus&&<button className="global-voice-status" onClick={()=>{writeNavigationMemory(user.id,{view:"server",server:voiceStatus.serverId,channel:voiceStatus.channelId});setServerView(voiceStatus.serverId)}} aria-label={`Return to ${voiceStatus.channelName} voice channel`}>
-        <span className="global-voice-status-icon"><Volume2 size={18}/></span>
-        <span><strong>Voice Connected</strong><small>{voiceStatus.serverName} / {voiceStatus.channelName}</small></span>
-      </button>}
+      {voiceStatus&&<div className="global-voice-status">
+        <button className="global-voice-return" onClick={()=>{writeNavigationMemory(user.id,{view:"server",server:voiceStatus.serverId,channel:voiceStatus.channelId});setServerView(voiceStatus.serverId)}} aria-label={`Return to ${voiceStatus.channelName} voice channel`}>
+          <span className="global-voice-status-icon"><Volume2 size={18}/></span>
+          <span><strong>Voice Connected</strong><small>{voiceStatus.serverName} / {voiceStatus.channelName}</small></span>
+        </button>
+        <span className="global-voice-actions"><button className={voiceStatus.muted?"off":""} aria-label={voiceStatus.muted?"Unmute microphone":"Mute microphone"} onClick={voiceStatus.toggleMute}>{voiceStatus.muted?<MicOff size={17}/>:<Mic size={17}/>}</button><button className={voiceStatus.deafened?"off":""} aria-label={voiceStatus.deafened?"Undeafen":"Deafen"} onClick={voiceStatus.toggleDeafen}>{voiceStatus.deafened?<VolumeX size={17}/>:<Volume2 size={17}/>}</button></span>
+      </div>}
     </>
   );
 }

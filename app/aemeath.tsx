@@ -33,7 +33,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import VoiceRoom from "./voice-room";
+import VoiceRoom, {type VoiceControls} from "./voice-room";
 import ServerSettings from "./server-settings";
 import MessageMenu from "./message-menu";
 import ImagePreview from "./image-preview";
@@ -90,7 +90,7 @@ export default function Aemeath({
   user: LocalUser;
   onSettings: () => void;
   onDirect: () => void;
-  onVoiceStatus:(status:{serverId:string;serverName:string;channelId:string;channelName:string}|null)=>void;
+  onVoiceStatus:(status:({serverId:string;serverName:string;channelId:string;channelName:string}&Partial<VoiceControls>)|null)=>void;
   initialServer: string;
   startCreate?: boolean;
 }) {
@@ -614,7 +614,7 @@ export default function Aemeath({
             </div>
           )}
           {incomingVoiceInvite&&<div className="voice-invite-banner"><div><strong>{incomingVoiceInvite.from_name} invited you to voice</strong><span>Join {incomingVoiceInvite.channel_name}</span></div><button className="join" onClick={()=>{const invite=incomingVoiceInvite;setIncomingVoiceInvite(null);setCurrent(invite.channel);void api("",{action:"voice-invite-response",id:invite.id})}}>Join</button><button aria-label="Dismiss voice invite" onClick={()=>{const invite=incomingVoiceInvite;setIncomingVoiceInvite(null);void api("",{action:"voice-invite-response",id:invite.id})}}><X size={16}/></button></div>}
-          {voiceChannel&&<div className={`voice-room-host${current===voiceChannel.id?"":" background"}`}><VoiceRoom channel={voiceChannel.id} name={voiceChannel.name} user={{id:user.id,name}} onInvite={()=>{setVoiceInviteChannel(voiceChannel.id);setFormError("");setModal("voice-invite")}} onJoinedChange={joined=>{const status=joined?voiceChannel:null;setActiveVoice(status);onVoiceStatus(status?{serverId:status.serverId,serverName:status.serverName,channelId:status.id,channelName:status.name}:null)}}/></div>}
+          {voiceChannel&&<div className={`voice-room-host${current===voiceChannel.id?"":" background"}`}><VoiceRoom channel={voiceChannel.id} name={voiceChannel.name} user={{id:user.id,name}} onInvite={()=>{setVoiceInviteChannel(voiceChannel.id);setFormError("");setModal("voice-invite")}} onJoinedChange={joined=>{const status=joined?voiceChannel:null;setActiveVoice(status);onVoiceStatus(status?{serverId:status.serverId,serverName:status.serverName,channelId:status.id,channelName:status.name}:null)}} onVoiceControls={controls=>{if(controls)onVoiceStatus({serverId:voiceChannel.serverId,serverName:voiceChannel.serverName,channelId:voiceChannel.id,channelName:voiceChannel.name,...controls})}}/></div>}
           {!isVoice&&<div className="conversation">
             {!server ? (
               <>
