@@ -2219,3 +2219,50 @@ html.desktop-app .signed-in-downloads{display:none}
 }
 
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* Refined navigation, depth, and route transitions */
+.aemeath-app{isolation:isolate;background:#17161b}
+.aemeath-app::before{content:"";position:fixed;z-index:-1;inset:0;pointer-events:none;background:radial-gradient(900px 520px at 72% 12%,#852b5b16,transparent 65%),radial-gradient(700px 480px at 42% 100%,#4f1d4014,transparent 68%)}
+.server-rail{position:relative;background:linear-gradient(180deg,#16171b 0%,#121216 100%);box-shadow:inset -1px 0 #ffffff08,8px 0 28px #0002}
+.server-rail::after{content:"";position:absolute;top:0;right:0;bottom:0;width:1px;background:linear-gradient(transparent,#ff5ca840 28%,#ff5ca824 72%,transparent);pointer-events:none}
+.server-icon{position:relative;overflow:visible}
+.server-icon::after{content:"";position:absolute;inset:-4px;border-radius:18px;background:#ff5ca812;opacity:0;transform:scale(.82);transition:opacity var(--motion-fast) ease,transform var(--motion-normal) var(--motion-ease);pointer-events:none}
+.server-icon:hover::after,.server-icon.active::after{opacity:1;transform:scale(1)}
+.server-icon.active{border-color:#ff78b5;box-shadow:0 8px 24px #ff4f9f20,0 0 0 1px #ff7bb52e}
+.channel-sidebar{background:linear-gradient(180deg,#212228 0%,#1c1d22 100%);box-shadow:8px 0 30px #0002}
+.server-title{background:#25262bd9;backdrop-filter:blur(16px);border-bottom:1px solid #ffffff0a}
+.channel-group{position:relative;margin-top:10px}
+.channel-group::after{content:"";height:1px;flex:1;margin-left:7px;background:linear-gradient(90deg,#ffffff12,transparent)}
+.channel{position:relative;overflow:hidden;border:1px solid transparent}
+.channel::before{content:"";position:absolute;left:0;top:50%;width:3px;height:0;border-radius:0 4px 4px 0;background:linear-gradient(#ff91c3,#ff4595);transform:translateY(-50%);transition:height var(--motion-normal) var(--motion-ease),box-shadow var(--motion-fast) ease}
+.channel.active{background:linear-gradient(90deg,#4a293c,#34252f 72%);border-color:#ffffff0a;box-shadow:0 8px 22px #0002}
+.channel.active::before{height:66%;box-shadow:0 0 14px #ff5ca870}
+.channel:hover{background-color:#ffffff09}
+.user-bar{background:#191a1fd9;backdrop-filter:blur(15px);border-top:1px solid #ffffff0b;box-shadow:0 -8px 24px #0002}
+.chat-main{position:relative;background:linear-gradient(145deg,#1d1e23 0%,#1b191e 100%)}
+.chat-header{z-index:25;background:#202126d9;backdrop-filter:blur(18px) saturate(1.15);border-bottom:1px solid #ffffff0b;box-shadow:0 8px 28px #0002}
+.chat-header::after{content:"";position:absolute;left:18px;right:18px;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,#ff5ca838 24%,#ff5ca81a 70%,transparent)}
+.conversation{scroll-behavior:smooth;background:radial-gradient(700px 380px at 50% 0%,#7a285012,transparent 72%)}
+.surface-enter{transform-origin:50% 20%}
+.members-panel{background:linear-gradient(180deg,#1d1e23,#191a1f);border-left:1px solid #ffffff0b;box-shadow:-10px 0 30px #0002}
+.member{transition:transform var(--motion-fast) ease,background-color var(--motion-fast) ease,color var(--motion-fast) ease}
+.member:hover{transform:translateX(-3px);background:linear-gradient(90deg,#ffffff05,#ffffff0c)}
+.member-avatar{transition:transform var(--motion-normal) var(--motion-ease)}.member:hover .member-avatar{transform:scale(1.06)}
+.composer{background:#29272e;box-shadow:0 12px 34px #0003,inset 0 1px #ffffff09}
+.global-voice-status{backdrop-filter:blur(18px) saturate(1.2);box-shadow:0 18px 46px #000b,0 0 0 1px #56d79a12}
+
+@media(prefers-reduced-motion:no-preference){
+  @keyframes aemeath-surface-enter{from{opacity:0;transform:translateY(8px) scale(.997)}to{opacity:1;transform:none}}
+  @keyframes aemeath-sidebar-in{from{opacity:.3;transform:translateX(-10px)}to{opacity:1;transform:none}}
+  @keyframes aemeath-member-in{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+  .surface-enter{animation:aemeath-surface-enter .32s var(--motion-ease) both}
+  .channel-sidebar{animation:aemeath-sidebar-in .34s var(--motion-ease) both}
+  .members-panel{animation:aemeath-member-in .3s var(--motion-ease) both}
+  .channel.active svg{animation:aemeath-pop .22s var(--motion-ease) both}
+}
+
+@media(max-width:700px){
+  .channel-sidebar{box-shadow:18px 0 55px #000a}
+  .chat-header{backdrop-filter:blur(12px)}
+  .aemeath-app::before{background:radial-gradient(520px 340px at 70% 10%,#852b5b16,transparent 68%)}
+}

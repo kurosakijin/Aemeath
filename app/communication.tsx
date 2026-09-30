@@ -504,7 +504,7 @@ function Inbox({
               </button>
             </div>
           )}
-          <div className="conversation dm-conversation">
+          <div className="conversation dm-conversation surface-enter" key={selected || "inbox"}>
             {conversation ? (
               <>
                 <div className="dm-start">
