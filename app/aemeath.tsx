@@ -60,6 +60,7 @@ type Channel = {
 };
 type Member = { id: string; name: string; joined?:number; role?:"owner"|"admin"|"member" };
 type VoiceMember = Member & { channel:string; left_at?:number|string };
+type VoiceInvite = {id:string;channel:string;channel_name:string;from_id:string;from_name:string;created:number;expires:number};
 type InvitePreview = { code:string; expires:number; id:string; name:string; icon?:string; banner?:string; inviter:string; members:number };
 type Message = {
   id: string;
@@ -97,6 +98,9 @@ export default function Aemeath({
     [current, setCurrent] = useState(""),
     [members, setMembers] = useState<Member[]>([]),
     [voiceMembers,setVoiceMembers]=useState<VoiceMember[]>([]),
+    [activeVoice,setActiveVoice]=useState(""),
+    [voiceInviteChannel,setVoiceInviteChannel]=useState(""),
+    [incomingVoiceInvite,setIncomingVoiceInvite]=useState<VoiceInvite|null>(null),
     [messages, setMessages] = useState<Message[]>([]);
   const [name, setName] = useState(user?.name || "Your profile"),
     [modal, setModal] = useState(startCreate ? "picker" : ""),
@@ -130,10 +134,11 @@ export default function Aemeath({
       null,
     ),
     messageCount = useRef(0);
-  const rememberedChannel=useRef(""),channelsServer=useRef("");
+  const rememberedChannel=useRef(""),channelsServer=useRef(""),seenVoiceInvites=useRef(new Set<string>());
   const server = servers.find((s) => s.id === selected),
     channel = channels.find((c) => c.id === current),
     isVoice = channel?.kind === "voice",
+    voiceChannel = channels.find(c=>c.id===(activeVoice||(isVoice?current:""))),
     owner = server?.owner === user?.id,
     manager = owner || server?.membership_role === "admin";
   const open = (type: string) => {
@@ -190,6 +195,8 @@ export default function Aemeath({
           setChannels(d.channels);
           setMembers(d.members);
           setVoiceMembers(d.voiceMembers||[]);
+          const voiceInvite=(d.voiceInvites||[])[0] as VoiceInvite|undefined;
+          if(voiceInvite&&!seenVoiceInvites.current.has(voiceInvite.id)){seenVoiceInvites.current.add(voiceInvite.id);setIncomingVoiceInvite(voiceInvite);void notifyAemeath({key:`voice-invite-${voiceInvite.id}`,title:`${voiceInvite.from_name} invited you to voice`,body:`Join ${voiceInvite.channel_name}`,kind:"call"})}
           setCurrent((old) => {const candidate=d.channels.some((c:Channel)=>c.id===old)?old:d.channels.some((c:Channel)=>c.id===rememberedChannel.current)?rememberedChannel.current:"";rememberedChannel.current="";return candidate||d.channels[0]?.id||""});
           setError("");
         }
@@ -603,7 +610,9 @@ export default function Aemeath({
               </button>
             </div>
           )}
-          {isVoice && channel ? <VoiceRoom channel={channel.id} name={channel.name} user={{id:user.id,name}} onInvite={()=>void invite()}/> : <div className="conversation">
+          {incomingVoiceInvite&&<div className="voice-invite-banner"><div><strong>{incomingVoiceInvite.from_name} invited you to voice</strong><span>Join {incomingVoiceInvite.channel_name}</span></div><button className="join" onClick={()=>{const invite=incomingVoiceInvite;setIncomingVoiceInvite(null);setCurrent(invite.channel);void api("",{action:"voice-invite-response",id:invite.id})}}>Join</button><button aria-label="Dismiss voice invite" onClick={()=>{const invite=incomingVoiceInvite;setIncomingVoiceInvite(null);void api("",{action:"voice-invite-response",id:invite.id})}}><X size={16}/></button></div>}
+          {voiceChannel&&<div className={`voice-room-host${isVoice?"":" background"}`}><VoiceRoom channel={voiceChannel.id} name={voiceChannel.name} user={{id:user.id,name}} onInvite={()=>{setVoiceInviteChannel(voiceChannel.id);setFormError("");setModal("voice-invite")}} onJoinedChange={joined=>setActiveVoice(joined?voiceChannel.id:"")}/></div>}
+          {!isVoice&&<div className="conversation">
             {!server ? (
               <>
                 <div className="welcome">
@@ -852,6 +861,8 @@ export default function Aemeath({
                     ? "Create a channel"
                     : modal === "edit-channel"
                       ? "Edit channel"
+                      : modal === "voice-invite"
+                        ? "Invite a member to voice"
                       : modal === "profile"
                         ? "Make yourself at home"
                         : "Invite your people"}
@@ -867,6 +878,8 @@ export default function Aemeath({
                     ? "Give your next conversation a home."
                     : modal === "edit-channel"
                       ? "Change this channel's name, type, or topic."
+                      : modal === "voice-invite"
+                        ? "Send a notification to someone who is already a member of this server."
                       : modal === "profile"
                         ? "Choose the name your friends will see in chat."
                         : "Share this invitation with the people you want in " +
@@ -920,6 +933,8 @@ export default function Aemeath({
                 Join a Server
               </button>
             </div>
+          ) : modal === "voice-invite" ? (
+            <div className="voice-member-picker">{members.filter(member=>member.id!==user.id&&!voiceMembers.some(person=>person.id===member.id&&person.channel===voiceInviteChannel)).length?members.filter(member=>member.id!==user.id&&!voiceMembers.some(person=>person.id===member.id&&person.channel===voiceInviteChannel)).map(member=><button disabled={busy} key={member.id} onClick={()=>void(async()=>{setBusy(true);setFormError("");try{await api("",{action:"invite-to-voice",server:selected,channel:voiceInviteChannel,user:member.id});setModal("")}catch(e){setFormError((e as Error).message)}finally{setBusy(false)}})()}><span className="avatar">{initials(member.name)}</span><span><strong>{member.name}</strong><small>{member.role==="admin"?"Administrator":member.role==="owner"?"Server owner":"Member"}</small></span><UserPlus size={17}/></button>):<p className="muted-text">Everyone in this server is already in the lobby.</p>}{formError&&<p className="form-error">{formError}</p>}</div>
           ) : modal === "invite" ? (
             <>
               {busy ? (

@@ -102,7 +102,7 @@ async function post(channel: string, data: Record<string, unknown>) {
   return result;
 }
 
-export default function VoiceRoom({ channel, name, user, onInvite }: { channel: string; name: string; user: Person; onInvite:()=>void }) {
+export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChange }: { channel: string; name: string; user: Person; onInvite:()=>void; onJoinedChange:(joined:boolean)=>void }) {
   const [joined, setJoined] = useState(false), [members, setMembers] = useState<Person[]>([]),
     [remotes, setRemotes] = useState<Remote[]>([]), [muted, setMuted] = useState(false),
     [camera, setCamera] = useState(false), [sharing, setSharing] = useState(false),
@@ -227,7 +227,7 @@ export default function VoiceRoom({ channel, name, user, onInvite }: { channel: 
   const leave = useCallback(async () => {
     if (!joined && !local.current) return;
     roomTone("leave");
-    setJoined(false);joinedRef.current=false;setMediaTransport("mesh");setSpeakingIds(new Set());captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;clearLiveKitAudio();await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
+    setJoined(false);onJoinedChange(false);joinedRef.current=false;setMediaTransport("mesh");setSpeakingIds(new Set());captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;clearLiveKitAudio();await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false; local.current?.getTracks().forEach((track) => track.stop()); local.current = null;microphoneTrack.current=null;screenAudioTrack.current=null;
     disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach((pc) => pc.close()); peers.current.clear();peerSlots.current.clear();pendingIce.current.clear(); knownMembers.current = null; setRemotes([]);setRemoteSharing(new Set()); setCamera(false); setSharing(false);
     try { await voicePost({ action: "leave" }); } catch {}
   }, [joined,voicePost,clearLiveKitAudio]);
@@ -249,7 +249,7 @@ export default function VoiceRoom({ channel, name, user, onInvite }: { channel: 
       try {
         const response = await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Math.max(0,after.current-3000)}&session=${encodeURIComponent(voiceSession.current)}`, { cache: "no-store" });
         const data = await response.json() as Record<string, any>; if (!response.ok) throw new Error(data.error);
-        if(data.displaced){roomTone("leave");joinedRef.current=false;setJoined(false);setMediaTransport("mesh");setSpeakingIds(new Set());setTakenOver(true);captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;clearLiveKitAudio();await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false;local.current?.getTracks().forEach(track=>track.stop());local.current=null;microphoneTrack.current=null;cameraTrack.current=null;screenTrack.current=null;screenAudioTrack.current=null;disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach(peer=>peer.close());peers.current.clear();peerSlots.current.clear();pendingIce.current.clear();setRemotes([]);setRemoteSharing(new Set());setCamera(false);setSharing(false);setError("");return}
+        if(data.displaced){roomTone("leave");joinedRef.current=false;setJoined(false);setMediaTransport("mesh");setSpeakingIds(new Set());setTakenOver(true);onJoinedChange(false);captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;clearLiveKitAudio();await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false;local.current?.getTracks().forEach(track=>track.stop());local.current=null;microphoneTrack.current=null;cameraTrack.current=null;screenTrack.current=null;screenAudioTrack.current=null;disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach(peer=>peer.close());peers.current.clear();peerSlots.current.clear();pendingIce.current.clear();setRemotes([]);setRemoteSharing(new Set());setCamera(false);setSharing(false);setError("");return}
         after.current = Math.max(after.current,data.now||Date.now()); const list = (data.members || []) as Person[],live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));
         if (knownMembers.current) {
           const joinedPerson=live.find((p) => p.id !== user.id && !knownMembers.current!.has(p.id));if(joinedPerson)void notifyAemeath({key:`voice-${channel}-${joinedPerson.id}-${Date.now()}`,title:`${joinedPerson.name} joined ${name}`,body:"Someone joined your voice lobby",kind:"join"})
@@ -279,7 +279,7 @@ export default function VoiceRoom({ channel, name, user, onInvite }: { channel: 
       if(!navigator.mediaDevices?.getUserMedia){local.current=new MediaStream();listenOnly=true}
       else try { local.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation, noiseSuppression, deviceId: micId === "default" ? undefined : { exact: micId } }, video: false });microphoneTrack.current=local.current.getAudioTracks()[0]||null;if(microphoneTrack.current)microphoneTrack.current.contentHint="speech";await refreshDevices(); }
       catch(e){if(mediaPermissionDenied(e)||(e instanceof DOMException&&e.name==="NotFoundError")){local.current=new MediaStream();listenOnly=true}else throw e}
-      after.current = Date.now();await connectLiveKit();await voicePost({ action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true);joinedRef.current=true; roomTone("join");
+      after.current = Date.now();await connectLiveKit();await voicePost({ action: "join" }); knownMembers.current = new Set([user.id]); setMembers([user]); setJoined(true);onJoinedChange(true);joinedRef.current=true; roomTone("join");
       setMuted(listenOnly);if(listenOnly)setError("Joined in listen-only mode. Use the microphone button when you are ready to allow access.");
     } catch (e) { setError(e instanceof Error ? e.message : "Microphone access is required to join."); local.current?.getTracks().forEach((t) => t.stop()); local.current = null; }
     finally { setBusy(false); }

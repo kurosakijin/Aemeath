@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       const allowed = await membership(server, user.userId);
       if (!allowed) return bad("This server is unavailable.", 403);
       const now=Date.now();
-      const [cs, ms, vp] = await Promise.all([
+      const [cs, ms, vp, vi] = await Promise.all([
         db
           .prepare("SELECT * FROM channels WHERE server=? ORDER BY created,id")
           .bind(server)
@@ -58,12 +58,14 @@ export async function GET(request: Request) {
           .bind(server)
           .all(),
         db.prepare('SELECT v.channel,v."user" AS id,a.username AS name,v."left" AS left_at FROM voice_presence v JOIN channels c ON c.id=v.channel JOIN accounts a ON a.id=v."user" WHERE c.server=? AND v.updated>? AND (v."left"=0 OR v."left">?) ORDER BY v.joined').bind(server,now-30000,now-10000).all(),
+        db.prepare('SELECT i.id,i.channel,c.name AS channel_name,i."from" AS from_id,a.username AS from_name,i.created,i.expires FROM voice_invites i JOIN channels c ON c.id=i.channel JOIN accounts a ON a.id=i."from" WHERE i.server=? AND i."to"=? AND i.expires>? ORDER BY i.created DESC').bind(server,user.userId,now).all(),
       ]);
       return json({
         server: allowed,
         channels: cs.results,
         members: ms.results,
         voiceMembers: vp.results,
+        voiceInvites: vi.results,
       });
     }
     const list = await db
@@ -185,6 +187,11 @@ export async function POST(request: Request) {
         .run();
       return json({ ok: true });
     }
+    if(action==="voice-invite-response"){
+      const id=typeof data.id==="string"?data.id:"";
+      await db.prepare('DELETE FROM voice_invites WHERE id=? AND "to"=?').bind(id,uid).run();
+      return json({ok:true});
+    }
     if(action==="delete-message"){
       const id=typeof data.id==="string"?data.id:"";
       const found=await db.prepare("SELECT m.user,c.server FROM messages m JOIN channels c ON c.id=m.channel WHERE m.id=?").bind(id).first<{user:string;server:string}>();
@@ -199,6 +206,16 @@ export async function POST(request: Request) {
     if (!server) return bad("You do not have access to this server.", 403);
     const role=server.owner===uid?'owner':server.membership_role;
     const manager=role==='owner'||role==='admin';
+    if(action==="invite-to-voice"){
+      const target=typeof data.user==="string"?data.user:"",channel=typeof data.channel==="string"?data.channel:"";
+      if(target===uid)return bad("You are already here.");
+      const allowedTarget=await db.prepare("SELECT 1 FROM members WHERE server=? AND user=?").bind(server.id,target).first();
+      const allowedChannel=await db.prepare("SELECT 1 FROM channels WHERE id=? AND server=? AND kind='voice'").bind(channel,server.id).first();
+      if(!allowedTarget||!allowedChannel)return bad("Choose a server member and voice channel.");
+      await db.prepare('DELETE FROM voice_invites WHERE server=? AND channel=? AND "from"=? AND "to"=?').bind(server.id,channel,uid,target).run();
+      await db.prepare('INSERT INTO voice_invites (id,server,channel,"from","to",created,expires) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),server.id,channel,uid,target,now,now+120000).run();
+      return json({ok:true});
+    }
     if (action !== "invite" && !manager)
       return bad("You need an admin role to do that.", 403);
     if (action === "edit-server") {

@@ -39,6 +39,8 @@ async function ensureSchema() {
     ALTER TABLE voice_presence ADD COLUMN IF NOT EXISTS "left" BIGINT NOT NULL DEFAULT 0;
     ALTER TABLE voice_presence ADD COLUMN IF NOT EXISTS session TEXT NOT NULL DEFAULT '';
     CREATE TABLE IF NOT EXISTS voice_signals(id TEXT PRIMARY KEY,channel TEXT NOT NULL,"from" TEXT NOT NULL,"to" TEXT NOT NULL,body TEXT NOT NULL,created BIGINT NOT NULL);
+    CREATE TABLE IF NOT EXISTS voice_invites(id TEXT PRIMARY KEY,server TEXT NOT NULL,channel TEXT NOT NULL,"from" TEXT NOT NULL,"to" TEXT NOT NULL,created BIGINT NOT NULL,expires BIGINT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_voice_invites_to ON voice_invites("to",expires);
     DROP TABLE IF EXISTS voice_history;
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,channel TEXT NOT NULL,"user" TEXT NOT NULL,body TEXT NOT NULL,created BIGINT NOT NULL);
     CREATE TABLE IF NOT EXISTS invites(code TEXT PRIMARY KEY,server TEXT NOT NULL,expires BIGINT NOT NULL);
