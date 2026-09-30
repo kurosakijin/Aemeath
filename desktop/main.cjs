@@ -8,6 +8,12 @@ const APP_URL = process.env.AEMEATH_APP_URL || "https://aemeath-tau.vercel.app/"
 const APP_ORIGIN = new URL(APP_URL).origin;
 let mainWindow, tray, quitting = false, selectedCaptureSourceId = "";
 
+// Voice, screen capture, and WebRTC encoding must continue while users work in
+// the application they are sharing or while the Aemeath window is occluded.
+app.commandLine.appendSwitch("disable-renderer-backgrounding");
+app.commandLine.appendSwitch("disable-background-timer-throttling");
+app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+
 function trusted(url) {
   try { return new URL(url).origin === APP_ORIGIN; } catch { return false; }
 }
@@ -74,6 +80,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: true,
+      backgroundThrottling: false,
     },
   });
   mainWindow.once("ready-to-show",()=>mainWindow.show());
