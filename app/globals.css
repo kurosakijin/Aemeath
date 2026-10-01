@@ -2279,3 +2279,8 @@ html.desktop-app .signed-in-downloads{display:none}
 .voice-room:has(.stream-deck.focus-view) .watch-stream{top:auto;bottom:8px;height:30px!important;padding:0 9px!important;font-size:10px;transform:translateX(-50%)}
 .voice-room:has(.stream-deck.focus-view) .watch-stream:hover{transform:translate(-50%,-2px)}
 @media(max-width:700px){.voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams{width:calc(100% - 14px)!important;grid-template-columns:minmax(0,340px)!important;grid-auto-rows:auto!important;padding:48px 0 84px!important}.voice-tile:has(.watch-stream) .voice-avatar{transform:translateY(-24px)}.watch-stream{top:66%;height:34px!important}}
+
+/* Keep ordinary voice lobbies centered with the same scalable tile grid */
+.voice-room.joined.no-streams .voice-grid{inset:auto!important;top:0!important;left:50%!important;width:min(1100px,calc(100% - 24px))!important;height:auto!important;grid-template-columns:repeat(auto-fit,minmax(260px,340px))!important;grid-template-rows:none!important;grid-auto-rows:auto!important;justify-content:center!important;align-content:start!important;padding:54px 0 96px!important;overflow:auto!important;transform:translateX(-50%)}
+.voice-room.joined.no-streams .voice-tile{width:100%!important;height:auto!important;aspect-ratio:16/9!important}
+@media(max-width:700px){.voice-room.joined.no-streams .voice-grid{width:calc(100% - 14px)!important;grid-template-columns:minmax(0,340px)!important;padding:48px 0 84px!important}}
