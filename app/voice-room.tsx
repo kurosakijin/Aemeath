@@ -265,12 +265,12 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
         if(data.displaced){roomTone("leave");joinedRef.current=false;setJoined(false);setMediaTransport("mesh");setSpeakingIds(new Set());setTakenOver(true);onJoinedChange(false);captureCleanup.current?.();captureCleanup.current=null;screenAudioCleanup.current?.();screenAudioCleanup.current=null;clearLiveKitAudio();await livekitRoom.current?.disconnect();livekitRoom.current=null;sfuActive.current=false;local.current?.getTracks().forEach(track=>track.stop());local.current=null;microphoneTrack.current=null;cameraTrack.current=null;screenTrack.current=null;screenAudioTrack.current=null;disconnectTimers.current.forEach(timer=>clearTimeout(timer));disconnectTimers.current.clear();peers.current.forEach(peer=>peer.close());peers.current.clear();peerSlots.current.clear();pendingIce.current.clear();setRemotes([]);setRemoteSharing(new Set());setCamera(false);setSharing(false);setError("");return}
         after.current = Math.max(after.current,data.now||Date.now()); let list = (data.members || []) as Person[];
         if(!list.some(person=>person.id===user.id)){await voicePost({action:"join"});list=[...list,user]}
-        const live=list.filter((p)=>!p.reconnecting), nextMembers = new Set(live.map((p) => p.id));
+        const live=list.filter((p)=>!p.reconnecting), presentMembers=new Set(list.map((p)=>p.id));
         if (knownMembers.current) {
           const joinedPerson=live.find((p) => p.id !== user.id && !knownMembers.current!.has(p.id));if(joinedPerson){void notifyAemeath({key:`voice-${channel}-${joinedPerson.id}-${Date.now()}`,title:`${joinedPerson.name} joined ${name}`,body:"Someone joined your voice lobby",kind:"join"});void broadcastVoiceState(muted,deafened)}
-          if ([...knownMembers.current].some((id) => id !== user.id && !nextMembers.has(id))) roomTone("leave");
+          if ([...knownMembers.current].some((id) => id !== user.id && !presentMembers.has(id))) roomTone("leave");
         }
-        knownMembers.current = nextMembers; setMembers(list); live.forEach((p) => names.current.set(p.id, p.name));
+        knownMembers.current = presentMembers; setMembers(list); live.forEach((p) => names.current.set(p.id, p.name));
         if(!sfuActive.current){
           for (const item of (data.signals || []) as Signal[]){if(seenSignals.current.has(item.id))continue;await handleSignal(item);seenSignals.current.add(item.id)}
           if(seenSignals.current.size>1000)seenSignals.current=new Set([...seenSignals.current].slice(-500));
