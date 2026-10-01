@@ -828,7 +828,7 @@ export default function Aemeath({
             members.map((m) => (
               <button className="member" key={m.id} onClick={()=>setMemberProfile(m)} onContextMenu={event=>{event.preventDefault();event.stopPropagation();setMemberProfile(null);setMemberContext({member:m,x:Math.min(event.clientX,window.innerWidth-224),y:Math.min(event.clientY,window.innerHeight-310)})}}>
                 <span className="member-avatar"><span className="avatar">{initials(m.name || "Member")}</span><i className={voiceMembers.some(person=>person.id===m.id&&!Number(person.left_at))||m.id===user.id?"":"idle"}/></span>
-                <span className="member-name"><strong>{m.name || "Member"}</strong><small>{voiceMembers.find(person=>person.id===m.id&&!Number(person.left_at))?`In ${channels.find(item=>item.id===voiceMembers.find(person=>person.id===m.id)?.channel)?.name||"voice"}`:m.id===user.id?"Online · You":m.role==="owner"?"Server owner":m.role==="admin"?"Administrator":"Member"}</small></span>
+                <span className="member-name"><strong>{m.name || "Member"}</strong><small>{voiceMembers.find(person=>person.id===m.id&&!Number(person.left_at))?`In ${channels.find(item=>item.id===voiceMembers.find(person=>person.id===m.id)?.channel)?.name||"voice"}`:m.id===user.id?"Online":m.role==="owner"?"Server owner":m.role==="admin"?"Administrator":"Member"}</small></span>
                 <span className={`member-role-icon ${m.role||"member"}`} title={m.role==="owner"?"Server owner":m.role==="admin"?"Administrator":"Member"}>{m.role==="owner"?<Crown size={13}/>:m.role==="admin"?<Shield size={13}/>:null}</span>
               </button>
             ))
