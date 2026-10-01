@@ -247,6 +247,7 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
   useEffect(()=>{if(!joined)return;const start=()=>{void getVoicePlaybackAudio().resume();void livekitRoom.current?.startAudio().catch(()=>{});for(const {element} of livekitAudio.current.values())void element.play().catch(()=>{})};document.addEventListener("pointerdown",start,{passive:true});document.addEventListener("touchend",start,{passive:true});return()=>{document.removeEventListener("pointerdown",start);document.removeEventListener("touchend",start)}},[joined]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[]);
   useEffect(()=>{const mobile=matchMedia("(pointer: coarse)").matches||navigator.maxTouchPoints>1;setMobileDevice(mobile);if(mobile)setCameraId(current=>current==="default"?"front":current);const legacy=navigator as Navigator&{getDisplayMedia?:typeof navigator.mediaDevices.getDisplayMedia};setScreenShareSupported(typeof navigator.mediaDevices?.getDisplayMedia==="function"||typeof legacy.getDisplayMedia==="function")},[]);
+  useEffect(()=>{if(!joined||!mobileDevice)return;document.documentElement.classList.add("mobile-voice-room-open");return()=>document.documentElement.classList.remove("mobile-voice-room-open")},[joined,mobileDevice]);
   useEffect(() => { if (localVideo.current) localVideo.current.srcObject = sharing&&screenTrack.current?new MediaStream([screenTrack.current]):local.current; }, [camera, sharing, joined]);
   useEffect(() => {
     if (joined) return;
