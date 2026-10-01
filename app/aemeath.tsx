@@ -203,12 +203,13 @@ export default function Aemeath({
     setChannelLoading(true);
     const load = async () => {
       try {
-        const d = await api("?server=" + encodeURIComponent(selected));
+        const [d,voiceResponse] = await Promise.all([api("?server=" + encodeURIComponent(selected)),fetch("/api/voice?server="+encodeURIComponent(selected),{cache:"no-store"})]);
+        const voiceData=voiceResponse.ok?await voiceResponse.json() as {members?:VoiceMember[]}:{members:[]};
         if (alive) {
           channelsServer.current = selected;
           setChannels(d.channels);
           setMembers(d.members);
-          setVoiceMembers(d.voiceMembers||[]);
+          setVoiceMembers(voiceData.members||d.voiceMembers||[]);
           const voiceInvite=(d.voiceInvites||[])[0] as VoiceInvite|undefined;
           if(voiceInvite&&!seenVoiceInvites.current.has(voiceInvite.id)){seenVoiceInvites.current.add(voiceInvite.id);setIncomingVoiceInvite(voiceInvite);void notifyAemeath({key:`voice-invite-${voiceInvite.id}`,title:`${voiceInvite.from_name} invited you to voice`,body:`Join ${voiceInvite.channel_name}`,kind:"call"})}
           setCurrent((old) => {const candidate=d.channels.some((c:Channel)=>c.id===old)?old:d.channels.some((c:Channel)=>c.id===rememberedChannel.current)?rememberedChannel.current:"";rememberedChannel.current="";return candidate||d.channels[0]?.id||""});

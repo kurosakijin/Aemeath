@@ -6,7 +6,15 @@ async function allowed(channel:string,user:string){const row=await database().pr
 
 export async function GET(request:Request){
   try{
-    const user=await requireAccount(),p=new URL(request.url).searchParams,channel=str(p.get('channel')),session=str(p.get('session'));await allowed(channel,user.id);
+    const user=await requireAccount(),p=new URL(request.url).searchParams,server=str(p.get('server'));
+    if(server){
+      const db=database(),now=Date.now(),member=await db.prepare('SELECT 1 FROM members WHERE server=? AND "user"=?').bind(server,user.id).first();
+      if(!member)throw new AppError('This server is unavailable.',403);
+      await db.prepare('DELETE FROM voice_presence WHERE updated<? OR ("left">0 AND "left"<?)').bind(now-30000,now-10000).run();
+      const members=await db.prepare('SELECT v.channel,v."user" AS id,a.username AS name,v."left" AS left_at FROM voice_presence v JOIN channels c ON c.id=v.channel JOIN accounts a ON a.id=v."user" WHERE c.server=? AND v.updated>? AND (v."left"=0 OR v."left">?) ORDER BY v.joined').bind(server,now-30000,now-10000).all();
+      return json({members:members.results,now});
+    }
+    const channel=str(p.get('channel')),session=str(p.get('session'));await allowed(channel,user.id);
     const db=database(),after=Number(p.get('after')||0),now=Date.now();
     await Promise.all([db.prepare('DELETE FROM voice_presence WHERE updated<? OR ("left">0 AND "left"<?)').bind(now-30000,now-10000).run(),db.prepare('DELETE FROM voice_signals WHERE created<?').bind(now-120000).run()]);
     const [members,signals,owner]=await Promise.all([
