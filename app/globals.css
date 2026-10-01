@@ -2284,3 +2284,11 @@ html.desktop-app .signed-in-downloads{display:none}
 .voice-room.joined.no-streams .voice-grid{inset:auto!important;top:0!important;left:50%!important;width:min(1100px,calc(100% - 24px))!important;height:auto!important;grid-template-columns:repeat(auto-fit,minmax(260px,340px))!important;grid-template-rows:none!important;grid-auto-rows:auto!important;justify-content:center!important;align-content:start!important;padding:54px 0 96px!important;overflow:auto!important;transform:translateX(-50%)}
 .voice-room.joined.no-streams .voice-tile{width:100%!important;height:auto!important;aspect-ratio:16/9!important}
 @media(max-width:700px){.voice-room.joined.no-streams .voice-grid{width:calc(100% - 14px)!important;grid-template-columns:minmax(0,340px)!important;padding:48px 0 84px!important}}
+
+/* Scroll-zoom image viewer and unobstructed modal state */
+html.image-preview-open .global-voice-status,html.image-preview-open .own-profile-card{display:none!important}
+.image-lightbox-stage.interactive{display:grid;place-items:center;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#70636c #171419;cursor:zoom-in}
+.image-lightbox-stage.interactive.zoomed{display:block;overflow:auto;cursor:grab}
+.image-lightbox-stage.interactive.zoomed:active{cursor:grabbing}
+.image-lightbox-stage.interactive img{display:block;max-width:none!important;max-height:none!important;min-width:0!important;margin:auto;object-fit:contain;user-select:none;transition:width .14s var(--motion-ease),height .14s var(--motion-ease)}
+.image-zoom-level{min-width:42px;color:#aaa5ad;font-size:11px;font-weight:750;text-align:center;font-variant-numeric:tabular-nums}
