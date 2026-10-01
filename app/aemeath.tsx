@@ -145,7 +145,7 @@ export default function Aemeath({
       null,
     ),
     messageCount = useRef(0);
-  const rememberedChannel=useRef(""),channelsServer=useRef(""),seenVoiceInvites=useRef(new Set<string>()),emptyServerPickerShown=useRef(false);
+  const rememberedChannel=useRef(""),channelsServer=useRef(""),seenVoiceInvites=useRef(new Set<string>()),emptyServerPickerShown=useRef(false),previousStartCreate=useRef(startCreate);
   const server = servers.find((s) => s.id === selected),
     channel = channels.find((c) => c.id === current),
     isVoice = channel?.kind === "voice",
@@ -160,6 +160,10 @@ export default function Aemeath({
     setCopied(false);
     setModal(type);
   };
+  useEffect(()=>{
+    if(startCreate&&!previousStartCreate.current)open("picker");
+    previousStartCreate.current=startCreate;
+  },[startCreate]);
   useEffect(()=>{if(initialServer)setSelected(initialServer)},[initialServer]);
   useEffect(()=>{try{const saved=sessionStorage.getItem(`aemeath-voice-session-${user.id}`);if(!saved)return;const value=JSON.parse(saved) as {id?:string;name?:string;serverId?:string;serverName?:string;muted?:boolean;deafened?:boolean};if(value.id&&value.name&&value.serverId&&value.serverName)setActiveVoice({...value,id:value.id,name:value.name,serverId:value.serverId,serverName:value.serverName,restore:true})}catch{}},[user.id]);
   const openChannel = (item?: Channel) => {
@@ -863,7 +867,11 @@ export default function Aemeath({
       <Dialog
         open={!!modal&&modal!=="server-settings"}
         onOpenChange={(v) => {
-          if (!busy && !v) setModal("");
+          if (!busy && !v) {
+            const returnToDirect = modal === "picker" && !servers.length;
+            setModal("");
+            if (returnToDirect) onDirect();
+          }
         }}
       >
         <DialogContent className="aemeath-dialog">
