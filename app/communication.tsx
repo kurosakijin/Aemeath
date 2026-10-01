@@ -159,7 +159,7 @@ function Inbox({
       }
     };
     poll();
-    const t = setInterval(poll, 5000);
+    const t = setInterval(poll, 10000);
     return () => {
       mounted = false;
       clearInterval(t);
@@ -194,7 +194,7 @@ function Inbox({
     };
     setMore(false);
     poll();
-    const t = setInterval(poll, 1500);
+    const t = setInterval(poll, 3000);
     return () => {
       alive = false;
       clearInterval(t);

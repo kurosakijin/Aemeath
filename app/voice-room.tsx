@@ -253,7 +253,7 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
     if (joined) return;
     let active=true;
     const watch=async()=>{try{const response=await fetch(`/api/voice?channel=${encodeURIComponent(channel)}&after=${Date.now()}`,{cache:"no-store"}),data=await response.json() as Record<string,any>;if(active&&response.ok)setMembers((data.members||[]) as Person[])}catch{/* Keep the room usable if presence refresh is interrupted. */}};
-    void watch();const timer=setInterval(watch,2000);return()=>{active=false;clearInterval(timer)};
+    void watch();const timer=setInterval(watch,5000);return()=>{active=false;clearInterval(timer)};
   },[channel,joined]);
   useEffect(() => {
     if (!joined) return;
@@ -281,7 +281,7 @@ export default function VoiceRoom({ channel, name, user, onInvite, onJoinedChang
       } catch (e) { if (alive.current) setError((e as Error).message || "Could not refresh the voice room."); }
       finally{polling.current=false}
     };
-    void poll(); const timer = setInterval(() => { void voicePost({ action: "heartbeat" }); void poll(); }, 1500);
+    void poll(); const timer = setInterval(() => { void voicePost({ action: "heartbeat" }); void poll(); }, 5000);
     return () => clearInterval(timer);
   }, [channel, joined, user.id, offer, handleSignal, closePeer, syncPeerTracks,voicePost,clearLiveKitAudio,broadcastVoiceState,muted,deafened]);
 

@@ -465,7 +465,7 @@ export function CallProvider({
       }
     };
     void poll();
-    const t = setInterval(poll, 2000);
+    const t = setInterval(poll, 4000);
     return () => {
       mounted = false;
       clearInterval(t);

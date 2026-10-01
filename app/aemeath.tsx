@@ -222,7 +222,7 @@ export default function Aemeath({
       }
     };
     load();
-    const t = setInterval(load, 3000);
+    const t = setInterval(load, 8000);
     return () => {
       alive = false;
       clearInterval(t);
@@ -256,7 +256,7 @@ export default function Aemeath({
       }
     };
     poll();
-    const t = setInterval(poll, 4000);
+    const t = setInterval(poll, 5000);
     return () => {
       alive = false;
       clearInterval(t);
