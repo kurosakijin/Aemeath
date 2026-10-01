@@ -422,8 +422,7 @@ export default function Aemeath({
             <MessageCircle />
           </button>
           <div className="rail-line" />
-          {servers.length ? (
-            servers.map((s) => (
+          {servers.map((s) => (
               <button
                 key={s.id}
                 className={"server-icon " + (selected === s.id ? "active" : "")}
@@ -437,12 +436,7 @@ export default function Aemeath({
               >
                 {s.icon ? <img className="server-rail-image" src={s.icon} alt=""/> : initials(s.name)}
               </button>
-            ))
-          ) : (
-            <div className="server-icon active">
-              <MessageCircle />
-            </div>
-          )}
+            ))}
           <button
             className="server-icon add"
             title="Create or join a server"
