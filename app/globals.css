@@ -2269,8 +2269,13 @@ html.desktop-app .signed-in-downloads{display:none}
 }
 
 /* Stream previews stay attached to their participant until watched */
+.voice-room.joined:has(.stream-deck.tiles-view){display:block!important;overflow:hidden}
 .voice-room:has(.stream-deck.tiles-view) .stream-deck.tiles-view{display:none!important}
-.watch-stream{position:absolute;z-index:3;left:50%;top:50%;width:auto!important;height:38px!important;display:flex!important;align-items:center;justify-content:center;gap:7px;padding:0 14px!important;border:1px solid #ffffff26!important;border-radius:9px!important;background:#17151bd9!important;color:#fff!important;font-size:12px;font-weight:750;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 8px 24px #0007;backdrop-filter:blur(8px);cursor:pointer}
+.voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams{position:absolute!important;top:0;left:50%;width:min(1100px,calc(100% - 24px))!important;height:auto!important;display:grid!important;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))!important;grid-auto-rows:clamp(175px,24vh,230px)!important;align-content:start!important;gap:10px!important;padding:54px 0 96px!important;overflow:auto!important;transform:translateX(-50%)}
+.voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams .voice-tile{width:100%!important;height:100%!important;min-height:0!important;margin:0!important;aspect-ratio:auto!important}
+.voice-tile:has(.watch-stream) .voice-avatar{transform:translateY(-28px)}
+.watch-stream{position:absolute;z-index:3;left:50%;top:64%;width:auto!important;height:36px!important;display:flex!important;align-items:center;justify-content:center;gap:7px;padding:0 14px!important;border:1px solid #ffffff26!important;border-radius:9px!important;background:#17151bd9!important;color:#fff!important;font-size:12px;font-weight:750;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 8px 24px #0007;backdrop-filter:blur(8px);cursor:pointer}
 .watch-stream:hover{background:#ff5ca8!important;color:#29151f!important;border-color:#ff8bc0!important;transform:translate(-50%,-52%)}
 .voice-room:has(.stream-deck.focus-view) .watch-stream{top:auto;bottom:8px;height:30px!important;padding:0 9px!important;font-size:10px;transform:translateX(-50%)}
 .voice-room:has(.stream-deck.focus-view) .watch-stream:hover{transform:translate(-50%,-2px)}
+@media(max-width:700px){.voice-room:has(.stream-deck.tiles-view) .voice-grid.with-streams{width:calc(100% - 14px)!important;grid-template-columns:1fr!important;grid-auto-rows:170px!important;padding:48px 0 84px!important}.voice-tile:has(.watch-stream) .voice-avatar{transform:translateY(-24px)}.watch-stream{top:66%;height:34px!important}}
