@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 const connectionString = process.env.DATABASE_URL;
-const pool = connectionString ? new Pool({ connectionString, max: 2, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 10_000, allowExitOnIdle: true }) : null;
+const pool = connectionString ? new Pool({ connectionString, max: 2, idleTimeoutMillis: 60_000, connectionTimeoutMillis: 10_000, allowExitOnIdle: true }) : null;
 pool?.on("error",(error)=>console.error("Idle database connection failed",error.message));
 let schemaPromise: Promise<void> | null = null;
 const schemaVersion = "1";
