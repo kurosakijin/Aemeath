@@ -117,6 +117,7 @@ function Inbox({
     [more, setMore] = useState(false),
     [olderLoading, setOlderLoading] = useState(false);
   const [navigationReady,setNavigationReady]=useState(false);
+  const [createServerRequest,setCreateServerRequest]=useState(0);
   const [profileOpen,setProfileOpen]=useState(false);
   const [voiceStatus,setVoiceStatus]=useState<({serverId:string;serverName:string;channelId:string;channelName:string}&Partial<VoiceControls>)|null>(null);
   const [attachment,setAttachment]=useState(""),[attachmentName,setAttachmentName]=useState(""),[attachmentSpoiler,setAttachmentSpoiler]=useState(false);
@@ -330,7 +331,8 @@ function Inbox({
         onDirect={() => {writeNavigationMemory(user.id,{view:"direct"});setServerView(null)}}
         onVoiceStatus={setVoiceStatus}
         initialServer={serverView||""}
-        startCreate={serverView===""}
+        createServerRequest={createServerRequest}
+        onServerReady={server=>setServerView(server)}
       />
       </div>
       <div className={`persistent-app-view${serverView===null?" active":" hidden"}`}>
@@ -369,7 +371,7 @@ function Inbox({
             className="server-icon add"
             title="Add a server"
             aria-label="Add a server"
-            onClick={() => setServerView("")}
+            onClick={() => setCreateServerRequest(request=>request+1)}
           >
             <Plus />
           </button>
