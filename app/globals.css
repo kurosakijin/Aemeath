@@ -2267,3 +2267,10 @@ html.desktop-app .signed-in-downloads{display:none}
   .chat-header{backdrop-filter:blur(12px)}
   .aemeath-app::before{background:radial-gradient(520px 340px at 70% 10%,#852b5b16,transparent 68%)}
 }
+
+/* Stream previews stay attached to their participant until watched */
+.voice-room:has(.stream-deck.tiles-view) .stream-deck.tiles-view{display:none!important}
+.watch-stream{position:absolute;z-index:3;left:50%;top:50%;width:auto!important;height:38px!important;display:flex!important;align-items:center;justify-content:center;gap:7px;padding:0 14px!important;border:1px solid #ffffff26!important;border-radius:9px!important;background:#17151bd9!important;color:#fff!important;font-size:12px;font-weight:750;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 8px 24px #0007;backdrop-filter:blur(8px);cursor:pointer}
+.watch-stream:hover{background:#ff5ca8!important;color:#29151f!important;border-color:#ff8bc0!important;transform:translate(-50%,-52%)}
+.voice-room:has(.stream-deck.focus-view) .watch-stream{top:auto;bottom:8px;height:30px!important;padding:0 9px!important;font-size:10px;transform:translateX(-50%)}
+.voice-room:has(.stream-deck.focus-view) .watch-stream:hover{transform:translate(-50%,-2px)}
