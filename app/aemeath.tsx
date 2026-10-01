@@ -145,7 +145,7 @@ export default function Aemeath({
       null,
     ),
     messageCount = useRef(0);
-  const rememberedChannel=useRef(""),channelsServer=useRef(""),seenVoiceInvites=useRef(new Set<string>());
+  const rememberedChannel=useRef(""),channelsServer=useRef(""),seenVoiceInvites=useRef(new Set<string>()),emptyServerPickerShown=useRef(false);
   const server = servers.find((s) => s.id === selected),
     channel = channels.find((c) => c.id === current),
     isVoice = channel?.kind === "voice",
@@ -174,6 +174,15 @@ export default function Aemeath({
     const data = await api();
     setServers(data.servers);
     if (data.profile?.name) setName(data.profile.name);
+    const hasInvite = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("invite");
+    if (!data.servers.length && !hasInvite && !emptyServerPickerShown.current) {
+      emptyServerPickerShown.current = true;
+      setFormError("");
+      setField("");
+      setCode("");
+      setCopied(false);
+      setModal("picker");
+    }
     setSelected((old) => {const candidate=preferred||old;return candidate&&data.servers.some((item:Server)=>item.id===candidate)?candidate:data.servers[0]?.id||""});
   }, []);
   useEffect(()=>{const saved=readNavigationMemory(user.id);if(saved?.view==="server"&&saved.server===initialServer)rememberedChannel.current=saved.channel||""},[user.id,initialServer]);
