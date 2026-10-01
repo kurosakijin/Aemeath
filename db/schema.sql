@@ -1,20 +1,5 @@
-import { Pool } from "pg";
-const connectionString = process.env.DATABASE_URL;
-const pool = connectionString ? new Pool({ connectionString, max: 2, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 10_000, allowExitOnIdle: true }) : null;
-pool?.on("error",(error)=>console.error("Idle database connection failed",error.message));
-let schemaPromise: Promise<void> | null = null;
-const schemaVersion = "1";
-async function ensureSchema() {
-  if (!pool) throw new Error("Database is not configured");
-  const dbPool=pool;
-  if (!schemaPromise)
-    schemaPromise = (async()=>{
-      await dbPool.query("CREATE TABLE IF NOT EXISTS app_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
-      const current=await dbPool.query<{value:string}>("SELECT value FROM app_meta WHERE key='schema_version'");
-      if(current.rows[0]?.value===schemaVersion)return;
-      await dbPool.query(
-        `
-    CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,username TEXT NOT NULL,username_key TEXT NOT NULL UNIQUE,email TEXT NOT NULL,email_key TEXT NOT NULL UNIQUE,salt TEXT NOT NULL,password_hash TEXT NOT NULL,created BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS app_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,username TEXT NOT NULL,username_key TEXT NOT NULL UNIQUE,email TEXT NOT NULL,email_key TEXT NOT NULL UNIQUE,salt TEXT NOT NULL,password_hash TEXT NOT NULL,created BIGINT NOT NULL);
     CREATE TABLE IF NOT EXISTS auth_sessions(hash TEXT PRIMARY KEY,"user" TEXT NOT NULL REFERENCES accounts(id),expires BIGINT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions("user");
     CREATE TABLE IF NOT EXISTS auth_limits("key" TEXT PRIMARY KEY,hits INTEGER NOT NULL,expires BIGINT NOT NULL);
@@ -66,37 +51,5 @@ function numbered(sql: string) {
   let i = 0;
   return sql
     .replace(/(?<!["'])\buser\b(?!["'])/gi, '"user"')
-    .replace(/\?/g, () => `$${++i}`);
-}
-class Statement {
-  constructor(
-    private sql: string,
-    private args: unknown[],
-  ) {}
-  async first<T = any>(): Promise<T | null> {
-    await ensureSchema();
-    const r = await pool!.query(numbered(this.sql), this.args);
-    return (r.rows[0] as T) || null;
-  }
-  async all<T = any>(): Promise<{ results: T[] }> {
-    await ensureSchema();
-    const r = await pool!.query(numbered(this.sql), this.args);
-    return { results: r.rows as T[] };
-  }
-  async run() {
-    await ensureSchema();
-    const r = await pool!.query(numbered(this.sql), this.args);
-    return { success: true, meta: { changes: r.rowCount ?? 0 } };
-  }
-}
-class Database {
-  prepare(sql: string) {
-    return { bind: (...args: unknown[]) => new Statement(sql, args) };
-  }
-  async batch(statements: Statement[]) {
-    return Promise.all(statements.map((s) => s.run()));
-  }
-}
-export function database() {
-  return new Database();
-}
+    .replace(/\?/g, () => `$${++i}
+INSERT INTO app_meta(key,value) VALUES('schema_version','1') ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value;
