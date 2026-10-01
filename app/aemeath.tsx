@@ -403,8 +403,9 @@ export default function Aemeath({
         ? "/"
         : window.location.pathname + window.location.search,
     );
-  if (modal === "server-settings" && server) return <ServerSettings server={server} members={members} onClose={()=>setModal("")} onInvite={()=>{setModal("");void invite()}} onSave={async(value)=>{await api("",{action:"edit-server",server:server.id,...value});await refreshServers(server.id)}} onManage={async(value)=>{await api("",{...value,server:server.id});const updated=await api("?server="+encodeURIComponent(server.id));setMembers(updated.members);await refreshServers(server.id)}}/>;
   return (
+    <>
+    {modal === "server-settings" && server&&<ServerSettings server={server} members={members} onClose={()=>setModal("")} onInvite={()=>{setModal("");void invite()}} onSave={async(value)=>{await api("",{action:"edit-server",server:server.id,...value});await refreshServers(server.id)}} onManage={async(value)=>{await api("",{...value,server:server.id});const updated=await api("?server="+encodeURIComponent(server.id));setMembers(updated.members);await refreshServers(server.id)}}/>}
     <SidebarProvider>
       <div className="aemeath-app">
         <nav className={`server-rail${mobile?" mobile-open":""}`} aria-label="Servers">
@@ -857,7 +858,7 @@ export default function Aemeath({
         {memberContext&&<div className="member-context-menu" style={{left:memberContext.x,top:memberContext.y}} onClick={event=>event.stopPropagation()} role="menu"><button onClick={()=>{setMemberProfile(memberContext.member);setMemberContext(null)}}><UserRound size={16}/> Profile</button>{memberContext.member.id!==user.id&&<button onClick={()=>{setDraft(current=>`${current}${current&&!current.endsWith(" ")?" ":""}@${memberContext.member.name} `);if(isVoice)setVoiceChat(true);setMemberContext(null)}}><AtSign size={16}/> Mention</button>}<div/><button disabled={!owner||memberContext.member.role==="owner"} onClick={()=>void(async()=>{try{await api("",{action:"set-member-role",server:selected,user:memberContext.member.id,role:memberContext.member.role==="admin"?"member":"admin"});const updated=await api("?server="+encodeURIComponent(selected));setMembers(updated.members);setMemberContext(null)}catch(e){setError((e as Error).message)}})()}><Shield size={16}/> {memberContext.member.role==="admin"?"Remove admin":"Make admin"}</button>{manager&&<button onClick={()=>{setMemberContext(null);setModal("server-settings")}}><Settings size={16}/> Open in Mod View</button>}<div/><button onClick={()=>{void navigator.clipboard.writeText(memberContext.member.id);setMemberContext(null)}}><Copy size={16}/> Copy User ID</button>{manager&&memberContext.member.id!==user.id&&memberContext.member.role!=="owner"&&<button className="danger" onClick={()=>void(async()=>{try{await api("",{action:"remove-member",server:selected,user:memberContext.member.id});setMembers(old=>old.filter(item=>item.id!==memberContext.member.id));setMemberContext(null)}catch(e){setError((e as Error).message)}})()}><UserMinus size={16}/> Remove from server</button>}</div>}
       </div>
       <Dialog
-        open={!!modal}
+        open={!!modal&&modal!=="server-settings"}
         onOpenChange={(v) => {
           if (!busy && !v) setModal("");
         }}
@@ -1140,6 +1141,7 @@ export default function Aemeath({
         </DialogContent>
       </Dialog>
     </SidebarProvider>
+    </>
   );
 }
 

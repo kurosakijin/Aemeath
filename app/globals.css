@@ -1960,7 +1960,7 @@ html.desktop-app .signed-in-downloads{display:none}
 
 /* Focused server profile workspace */
 html.server-settings-open .global-voice-status,html.server-settings-open .own-profile-card{display:none!important}
-.server-settings-page{grid-template-columns:260px minmax(0,1fr);background:radial-gradient(circle at 74% 4%,rgba(105,44,77,.2),transparent 28%),#1f2025}
+.server-settings-page{position:fixed;z-index:40000;inset:0;grid-template-columns:260px minmax(0,1fr);background:radial-gradient(circle at 74% 4%,rgba(105,44,77,.2),transparent 28%),#1f2025}
 .server-settings-nav{box-sizing:border-box;width:260px;padding:48px 18px 40px 24px;border-right:1px solid #292a30;overflow-x:hidden}.server-settings-nav small{display:block;max-width:100%;margin:0 8px 12px;padding:0 0 13px;border-bottom:1px solid #2f3036;overflow:hidden;color:#c19aae;text-overflow:ellipsis;white-space:nowrap}.server-settings-nav button{box-sizing:border-box;width:100%;min-width:0;padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.server-settings-nav button.active{background:linear-gradient(90deg,#513545,#3b3038);box-shadow:inset 3px 0 #ff69ae}
 .server-settings-main{padding-right:max(72px,calc((100vw - 1240px)/2));scrollbar-color:#4b4149 transparent}
 .server-settings-main>h1{font-size:28px;letter-spacing:-.035em}.server-settings-main>p{font-size:14px}
