@@ -1,0 +1,8 @@
+node_modules
+.next
+release
+.wrangler
+dist
+android/.gradle
+android/app/build
+*.log
