@@ -63,7 +63,7 @@ export function notificationTone(kind: NoticeKind) {
       const oscillator = audio!.createOscillator(), gain = audio!.createGain(), start = now + index * .1;
       oscillator.type = kind === "call" ? "sine" : "triangle";
       oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(.0001, start);gain.gain.exponentialRampToValueAtTime(kind === "call" ? .15 : .08, start + .015);gain.gain.exponentialRampToValueAtTime(.0001, start + .3);
+      gain.gain.setValueAtTime(.0001, start);gain.gain.exponentialRampToValueAtTime(kind === "call" ? .26 : .17, start + .015);gain.gain.exponentialRampToValueAtTime(.0001, start + .3);
       oscillator.connect(gain).connect(audio!.destination);oscillator.start(start);oscillator.stop(start + .32);
     });
   } catch { /* Audio is optional when the platform blocks playback. */ }

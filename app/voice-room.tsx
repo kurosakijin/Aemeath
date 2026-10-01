@@ -78,7 +78,7 @@ function roomTone(kind: "join" | "leave" | "stream-start" | "stream-stop" | "wat
       noteMap:Record<typeof kind,number[]>={join:[392,523.25,659.25],leave:[523.25,392],"stream-start":[329.63,493.88,739.99],"stream-stop":[659.25,440,293.66],"watch-start":[587.33,783.99],"watch-stop":[783.99,587.33]},
       notes=noteMap[kind];
     master.gain.setValueAtTime(.0001, now);
-    master.gain.exponentialRampToValueAtTime(.12, now + .025);
+    master.gain.exponentialRampToValueAtTime(.24, now + .025);
     master.gain.exponentialRampToValueAtTime(.0001, now + .52);
     master.connect(roomAudio.destination);
     notes.forEach((frequency, index) => {

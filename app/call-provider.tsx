@@ -162,7 +162,7 @@ export function CallProvider({
       const oscillator = context.createOscillator(),
         gain = context.createGain();
       oscillator.frequency.value = view.incoming ? 880 : 440;
-      gain.gain.setValueAtTime(0.08, context.currentTime);
+      gain.gain.setValueAtTime(0.2, context.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.32);
       oscillator.connect(gain).connect(context.destination);
       oscillator.start();
