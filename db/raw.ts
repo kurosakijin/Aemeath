@@ -1,12 +1,19 @@
 import { Pool } from "pg";
-const connectionString = process.env.DATABASE_URL;
-const pool = connectionString ? new Pool({ connectionString, max: 2, idleTimeoutMillis: 60_000, connectionTimeoutMillis: 10_000, allowExitOnIdle: true }) : null;
-pool?.on("error",(error)=>console.error("Idle database connection failed",error.message));
+import { runtimeEnv } from "@/lib/server/runtime-env";
+let pool: Pool | null = null;
+function getPool() {
+  if (pool) return pool;
+  const connectionString = runtimeEnv("DATABASE_URL");
+  if (!connectionString) return null;
+  pool = new Pool({ connectionString, max: 2, idleTimeoutMillis: 60_000, connectionTimeoutMillis: 10_000, allowExitOnIdle: true });
+  pool.on("error",(error)=>console.error("Idle database connection failed",error.message));
+  return pool;
+}
 let schemaPromise: Promise<void> | null = null;
 const schemaVersion = "1";
 async function ensureSchema() {
-  if (!pool) throw new Error("Database is not configured");
-  const dbPool=pool;
+  const dbPool=getPool();
+  if (!dbPool) throw new Error("Database is not configured");
   if (!schemaPromise)
     schemaPromise = (async()=>{
       await dbPool.query("CREATE TABLE IF NOT EXISTS app_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
@@ -75,17 +82,17 @@ class Statement {
   ) {}
   async first<T = any>(): Promise<T | null> {
     await ensureSchema();
-    const r = await pool!.query(numbered(this.sql), this.args);
+    const r = await getPool()!.query(numbered(this.sql), this.args);
     return (r.rows[0] as T) || null;
   }
   async all<T = any>(): Promise<{ results: T[] }> {
     await ensureSchema();
-    const r = await pool!.query(numbered(this.sql), this.args);
+    const r = await getPool()!.query(numbered(this.sql), this.args);
     return { results: r.rows as T[] };
   }
   async run() {
     await ensureSchema();
-    const r = await pool!.query(numbered(this.sql), this.args);
+    const r = await getPool()!.query(numbered(this.sql), this.args);
     return { success: true, meta: { changes: r.rowCount ?? 0 } };
   }
 }

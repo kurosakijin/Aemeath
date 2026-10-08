@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "Aemeath",
   webDir: "mobile-web",
   server: {
-    url: process.env.AEMEATH_APP_URL || "https://aemeath-tau.vercel.app/",
+    url: process.env.AEMEATH_APP_URL || "https://aemeath.abiv0422.workers.dev/",
     androidScheme: "https",
     cleartext: false,
   },

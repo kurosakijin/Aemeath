@@ -2,7 +2,7 @@
 
 Aemeath is a private community chat application for small groups. It combines servers, text channels, direct messages, voice rooms, camera calls, and screen sharing in one responsive web interface.
 
-The production service is being moved to Cloudflare Workers.
+**Live app:** [aemeath.abiv0422.workers.dev](https://aemeath.abiv0422.workers.dev/)
 
 ## What it includes
 

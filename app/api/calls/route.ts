@@ -1,4 +1,5 @@
 import { database } from "@/db/raw";
+import { runtimeEnv } from "@/lib/server/runtime-env";
 import {
   AppError,
   json,
@@ -74,7 +75,7 @@ export async function GET(r: Request) {
         },
       ];
       let relay = true;
-      const raw = process.env.ICE_SERVERS_JSON;
+      const raw = runtimeEnv("ICE_SERVERS_JSON");
       if (raw) {
         const extra = JSON.parse(raw) as RTCIceServer[];
         if (Array.isArray(extra)) {

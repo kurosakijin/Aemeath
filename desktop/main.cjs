@@ -4,7 +4,7 @@ const path = require("node:path");
 const log = require("electron-log/main");
 log.initialize();
 
-const APP_URL = process.env.AEMEATH_APP_URL || "https://aemeath-tau.vercel.app/";
+const APP_URL = process.env.AEMEATH_APP_URL || "https://aemeath.abiv0422.workers.dev/";
 const APP_ORIGIN = new URL(APP_URL).origin;
 let mainWindow, tray, quitting = false, selectedCaptureSourceId = "";
 
