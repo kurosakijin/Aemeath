@@ -2,7 +2,7 @@
 
 Aemeath is a private community chat application for small groups. It combines servers, text channels, direct messages, voice rooms, camera calls, and screen sharing in one responsive web interface.
 
-**Live app:** [aemeath-tau.vercel.app](https://aemeath-tau.vercel.app/)
+The production service is being moved to Cloudflare Workers.
 
 ## What it includes
 
@@ -20,7 +20,7 @@ Aemeath is a private community chat application for small groups. It combines se
 
 ## Run locally
 
-Requirements: Node.js 22.13 or newer and a PostgreSQL database such as Neon.
+Requirements: Node.js 22.13 or newer and a PostgreSQL database such as Supabase.
 
 1. Install dependencies:
 
@@ -46,7 +46,7 @@ Set `RESEND_API_KEY` and `AUTH_EMAIL_FROM` to require a six-digit email code bef
 
 Never commit `.env` or `.env.local`.
 
-## Production
+## Cloudflare production
 
 Create a production build with:
 
@@ -54,7 +54,21 @@ Create a production build with:
 npm run build
 ```
 
-The current production deployment runs on Vercel. Configure the same environment variables in the Vercel project before deploying.
+Authenticate Wrangler once, create the Worker secrets, and deploy:
+
+```bash
+npx wrangler login
+npx wrangler secret put DATABASE_URL --config dist/server/wrangler.json
+npx wrangler secret put LIVEKIT_URL --config dist/server/wrangler.json
+npx wrangler secret put LIVEKIT_API_KEY --config dist/server/wrangler.json
+npx wrangler secret put LIVEKIT_API_SECRET --config dist/server/wrangler.json
+npm run cloudflare:deploy
+```
+
+Run `npm run build` before the first `wrangler secret put` so
+`dist/server/wrangler.json` exists. Optional mail and TURN settings use the same
+`wrangler secret put NAME --config dist/server/wrangler.json` command. Preview
+the Worker runtime with `npm run cloudflare:preview`.
 
 ## Browser behavior
 
@@ -67,15 +81,17 @@ The current production deployment runs on Vercel. Configure the same environment
 
 - Next.js and React
 - TypeScript
-- PostgreSQL through Neon
+- PostgreSQL through Supabase
 - WebRTC for voice, camera, and screen sharing
-- Vercel for production hosting
+- Cloudflare Workers for production hosting
 
 ## Useful commands
 
 ```bash
 npm run dev       # Start local development
 npm run build     # Validate and create a production build
+npm run cloudflare:preview # Preview using the remote Workers runtime
+npm run cloudflare:deploy  # Build and deploy to Cloudflare Workers
 npm run lint      # Run lint checks
 ```
 
